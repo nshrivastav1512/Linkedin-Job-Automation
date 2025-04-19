@@ -1,0 +1,16 @@
+# Environment variables
+.env
+
+# Log files
+logs/
+
+# Tailored Resumes output
+Tailored_Resumes/
+
+# Excel output file
+*.xlsx
+
+# Python virtual environment (common names)
+venv/
+.venv/
+env/

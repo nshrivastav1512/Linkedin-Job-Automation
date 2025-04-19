@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nikhil Shrivastav Resume</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" integrity="sha512-9usAa10IRO0HhonpyAIVpjrylPvoDwiPUiKdWk5t3PyolY1cOd4DSE0Ga+ri4AuTroPR5aQvXU9xC6qOPnzFeg==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <style>
+        /* CSS for Print */
+        @media print {
+            @page {
+                size: A4;
+                margin: 5mm; /* Enforce small margin */
+            }
+            body {
+                margin: 0 !important; /* Override default body margin */
+                padding: 0 !important; /* Override default body padding */
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+            .container {
+                border: none !important;
+                box-shadow: none !important;
+                margin: 0 !important;
+                padding: 0 !important; /* Remove container padding for print */
+                max-width: 100% !important;
+                width: 100% !important;
+            }
+            /* Ensure no large gaps break pages */
+            h2, h3, .section, ul, li {
+                page-break-inside: avoid;
+            }
+            ul {
+                margin-top: 2px;
+                margin-bottom: 2px;
+            }
+            li {
+                margin-bottom: 2px;
+            }
+        }
+
+        /* General Body Styles */
+        body {
+            font-family: 'Arial', sans-serif;
+            line-height: 1.25; /* Reduced line height */
+            color: #333;
+            margin: 0;
+            padding: 0;
+            background-color: #fff;
+            font-size: 9pt; /* Reduced base font size */
+        }
+        /* Container for the resume content */
+        .container {
+            max-width: 200mm; /* A bit less than A4 width to account for margins */
+            margin: 5px auto; /* Reduced top/bottom margin */
+            padding: 10px; /* Reduced padding */
+            border: 1px solid #eee; /* Keep border for screen view */
+            background-color: #fff;
+        }
+        /* Name Heading */
+        h1 {
+            font-size: 20pt; /* Reduced */
+            margin-top: 0;
+            margin-bottom: -2px; /* Tightened */
+            color: #2c3e50; /* Dark blue */
+        }
+        /* Section Headings (Summary, Experience, etc.) */
+        h2 {
+            font-size: 12.5pt; /* Reduced */
+            color: #077ad8; /* Changed from teal to dark grey/blue */
+            border-bottom: 1px solid #34495e; /* Changed border color */
+            padding-bottom: 2px; /* Reduced padding */
+            margin-top: 10px; /* Reduced margin */
+            margin-bottom: 6px; /* Reduced margin */
+        }
+        /* Job/Institution Headings */
+        h3 {
+            font-size: 10.5pt; /* Reduced */
+            font-weight: bold;
+            margin-bottom: 0px; /* Tightened */
+            margin-top: 6px; /* Reduced margin */
+            color: #34495e; /* Dark grey/blue */
+        }
+        /* Job Title under Name */
+        .job-title-main {
+            font-size: 11pt; /* Slightly larger than other job titles */
+            font-weight: bold;
+            color: #555;
+            margin-bottom: 5px; /* Reduced margin */
+        }
+        /* Job Title within Experience */
+        .job-title {
+            font-size: 9.5pt; /* Reduced */
+            font-style: italic;
+            color: #555;
+            margin-bottom: 2px; /* Reduced margin */
+        }
+        /* Contact Information Block */
+        .contact-info {
+            margin-top: 2px; /* Reduced margin */
+            margin-bottom: 8px; /* Reduced margin */
+            font-size: 8pt; /* Reduced font size */
+            color: #555;
+            line-height: 1.15; /* Tighter line height */
+        }
+        /* Individual Contact Items */
+        .contact-info span {
+            margin-right: 8px; /* Reduced spacing */
+            display: inline-block;
+            white-space: nowrap;
+            vertical-align: middle; /* Align icons and text better */
+        }
+        /* Contact Links */
+        .contact-info a {
+            color: #333; /* Black link color */
+            text-decoration: none;
+            vertical-align: middle; /* Align link text with icon */
+        }
+        .contact-info a:hover {
+            text-decoration: underline; /* Underline on hover */
+        }
+        /* Contact Icons (Font Awesome) */
+        .contact-icon {
+            font-size: 10pt; /* Icon size */
+            color: black; /* Make icons black */
+            margin-right: 3px; /* Space between icon and text */
+            vertical-align: middle; /* Align icon vertically */
+        }
+        /* Specific size adjustment for phone icon */
+        .fa-phone.contact-icon {
+            font-size: 9pt; /* Reduce phone icon size slightly */
+        }
+        /* Unordered Lists (Bullet points) */
+        ul {
+            list-style-type: disc;
+            margin-left: 16px; /* Reduced indent */
+            padding-left: 0;
+            margin-top: 2px; /* Reduced margin */
+            margin-bottom: 4px; /* Reduced margin */
+        }
+        /* List Items */
+        li {
+            margin-bottom: 3px; /* Reduced spacing */
+        }
+        /* General Section Spacing */
+        .section {
+            margin-bottom: 8px; /* Reduced margin */
+        }
+        /* Date and Location (Floated Right) */
+        .date-location {
+            float: right;
+            font-weight: bold;
+            font-size: 8pt; /* Reduced font size */
+            color: #555;
+            text-align: right;
+            padding-left: 5px; /* Add small padding to avoid text collision */
+        }
+        /* Container for Skills Columns */
+        .skills-container {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 4px; /* Reduced margin */
+            gap: 10px; /* Add gap between columns */
+        }
+        /* Individual Skill Column */
+        .skills-column {
+            width: 48%; /* Adjust width as needed */
+        }
+        /* Skill Category Heading (e.g., Languages) */
+        .skills-column h4 {
+            font-size: 9.5pt; /* Reduced font size */
+            color: #34495e; /* Dark grey/blue */
+            margin-top: 0;
+            margin-bottom: 2px; /* Reduced margin */
+            border-bottom: 1px solid #eee;
+            padding-bottom: 1px; /* Reduced padding */
+        }
+        /* Skill List (No bullets) */
+        .skills-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            font-size: 8.5pt; /* Reduced skills font size */
+        }
+        .skills-list li {
+            margin-bottom: 2px; /* Reduced margin */
+        }
+        /* Bold Text */
+        b, strong {
+            font-weight: bold;
+        }
+        /* Clearfix for Floated Elements */
+        .clearfix::after {
+           content: "";
+           clear: both;
+           display: table;
+        }
+        /* Tighter spacing specifically for education list items */
+        .education-list {
+            margin-top: 1px !important;
+            margin-bottom: 0px !important;
+        }
+        .education-list li {
+            margin-bottom: 1px !important;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Nikhil Shrivastav</h1>
+        <div class="job-title-main">SQL Server Developer</div> <div class="contact-info">
+            <span><i class="fas fa-map-marker-alt contact-icon"></i> India</span>
+            <span><i class="fas fa-phone contact-icon"></i> +91 7249850389</span>
+            <span><i class="fas fa-envelope contact-icon"></i> <a href="mailto:nshrivastav0905@gmail.com">nshrivastav0905@gmail.com</a></span>
+            <span>
+                <i class="fab fa-linkedin contact-icon"></i>
+                <a href="https://linkedin.com/in/nshrivastav1512" target="_blank" rel="noopener noreferrer">linkedin.com/in/nshrivastav1512</a>
+            </span>
+            <span>
+                <i class="fab fa-github contact-icon"></i>
+                <a href="https://github.com/nshrivastav1512" target="_blank" rel="noopener noreferrer">github.com/nshrivastav1512</a>
+            </span>
+        </div>
+
+        <div class="section">
+            <h2>Summary</h2>
+            I'm a Database Engineer with a solid background in <b>SQL development</b>, data management, and <b>performance optimization</b>. With over a year of experience, I enjoy tackling complex <b>SQL queries</b>, designing well-structured databases, and building custom reports through tools like <b>SSRS</b> and <b>Power BI</b>. My work has consistently improved reports performance, upheld data integrity, and boosted client satisfaction. Known for my analytical approach and teamwork, I'm driven by a passion for creating reliable, high-performance database solutions that meet real business needs.
+        </div>
+
+        <div class="section">
+            <h2>Experience</h2>
+            <div class="clearfix">
+                <span class="date-location">Jul 2023 to Aug 2024<br>Pune</span>
+                <h3>Yardi Software Pvt Ltd</h3>
+                <div class="job-title">Software Engineer</div>
+            </div>
+            <ul>
+                <li>Developed and optimized <b>100+ custom reports</b> (<b>SSRS</b>, YSR, <b>SQL</b>) for client requirements, resolved <b>10+ critical bugs</b> in the Voyager project, and provided data fixes for over <b>7 million records</b>, ensuring 100% data integrity and improving system stability.</li>
+                <li>Handled support for <b>150+ clients</b> and processed 500+ requests, collaborating with onshore/offshore teams to resolve issues, clarify tasks, and streamline code reviews, resulting in a <b>10% improvement</b> in delivery and client satisfaction.</li>
+                <li>Engineered complex <b>SQL queries</b>, <b>stored procedures</b>, <b>triggers</b>, and user-defined <b>functions</b>, improving query performance by <b>5%</b>.</li>
+                <li>Mentored team members, delivered knowledge transfer sessions, and gained expertise in <b>SSRS</b>, Visual Basic, and <b>Power BI</b>, driving team proficiency and effective data visualizations.</li>
+            </ul>
+
+            <div class="clearfix">
+                <span class="date-location">Jan 2023 to Jul 2023<br>Pune</span>
+                <h3>Yardi Software Pvt Ltd</h3>
+                <div class="job-title">Software Engineer Intern</div>
+            </div>
+            <ul>
+                <li>Created optimal technical solutions to meet user needs by performing in-depth system analysis and improving existing <b>SQL queries</b> to enhance performance and streamline data retrieval.</li>
+                <li>Analyzed business reports to support prompt communication and provide ongoing technical support, while also developing reusable components to improve coding efficiency and documentation standards.</li>
+                <li>Resolved complex business issues, proposing long-term solutions to prevent recurring problems and ensure smoother business operations.</li>
+            </ul>
+
+            <div class="clearfix">
+                <span class="date-location">Jun 2022 to Jan 2023<br>Nagpur</span>
+                <h3>TN Byte Pvt Ltd</h3>
+                <div class="job-title">Software Developer</div>
+            </div>
+            <ul>
+                <li>Automated user engagement reporting by designing <b>SQL queries</b> to consolidate data from attendance, task completion, and performance tables into a unified dashboard.</li>
+                <li>Optimized database performance by redesigning schemas, <b>normalizing</b> structures, and adding <b>relationships</b> to support faster and more efficient data retrieval.</li>
+                <li>Tested and refined pre-built reports, enhancing <b>data accuracy</b>, visualization quality, and usability to meet reporting requirements.</li>
+            </ul>
+        </div>
+
+        <div class="section">
+            <h2>Skills</h2>
+            <div class="skills-container">
+                <div class="skills-column">
+                    <h4>Languages & Databases</h4>
+                    <ul class="skills-list">
+                        <li><b>SQL</b> (T-SQL, PL/SQL)</li>
+                        <li>Microsoft SQL Server</li>
+                        <li>Java</li>
+                    </ul>
+                  <!--  <h4>Operating Systems</h4> <ul class="skills-list">
+                        <li>Windows</li>
+                        <li>Linux</li>
+                        <li>Bash Script (Basics)</li>
+                    </ul>-->
+                </div>
+                <div class="skills-column">
+                    <h4>Tools & Technologies</h4>
+                    <ul class="skills-list">
+                        <li><b>SSRS</b> and <b>SSIS</b> (Reporting and Integration Services)</li>
+                        <li><b>Power BI</b> , <b>ETL</b> Processes</li>
+                        <li>Data Warehousing Concepts</li> <li>Reporting & Visualization</li>
+                        <li>Version Control (<b>Git, Bitbucket</b>)</li>
+                        <li>Performance Tuning & Optimization</li> <li>Data Modeling , Maven</li>
+                        <li>Troubleshooting & Debugging</li> </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>Education</h2>
+            <div class="clearfix">
+                <span class="date-location">Jun 2020 to May 2023<br>B.Tech - Nagpur</span>
+                <h3>G H Raisoni Institute of Engineering & Technology</h3>
+                <div>Computer Science and Engineering - CGPA: 9.4/10</div> </div>
+             <ul class="education-list">
+                <li>Developed and launched a Feedback Management System for the college, using Strapi as a headless CMS and React for the front end. The project is currently live and in use by the institution.</li>
+                <li>Actively participated in 10+ webinars, staying up-to-date with the latest trends and technologies in the industry.</li>
+                <li>Organized and led 80+ events, including workshops, hackathons, and coding challenges, fostering a collaborative and innovative environment.</li>
+             </ul>
+
+            <div class="clearfix">
+                 <span class="date-location">Jun 2017 to May 2020<br>Diploma - Nagpur</span>
+                 <h3>Anjuman Polytechnic</h3>
+                 <div>Computer Science - Score: 9.4/10</div> </div>
+            <ul class="education-list">
+                 <li>Explored various technologies, including Web Development, <b>Linux scripting</b>, <b>Data Warehousing</b>, and Big Data, with a particular focus on Data Driven Technologies.</li>
+                 <li>Completed an internship at Qaswa Technology, where I developed the Nois Tech website using Java, JSP and MySQL.</li>
+                 <li>Developed a College Management Web App as a capstone project, showcasing proficiency in full-stack development.</li>
+            </ul>
+        </div>
+
+    </div> </body>
+</html>
