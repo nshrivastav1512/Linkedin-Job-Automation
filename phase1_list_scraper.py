@@ -10,6 +10,7 @@ import random
 from urllib.parse import quote_plus
 from datetime import datetime
 import pandas as pd
+import zipfile # To handle BadZipFile exception
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
@@ -23,37 +24,44 @@ from selenium.common.exceptions import (
     ElementNotInteractableException
 )
 
-# Define ALL columns expected in the final Excel sheet across all phases
+# MODIFIED (Proposals #7, #8, #10, #11): Define ALL columns expected in the final Excel sheet across all phases
 # Ensures the initial file has the complete structure.
 ALL_EXPECTED_COLUMNS = [
+    # Core Job Info
     'Job ID', 'Title', 'Company', 'Location', 'Workplace Type', 'Link', 'Easy Apply', 'Promoted', 'Viewed',
     'Early Applicant', 'Verified', 'Posted Ago Text', 'Posted Days Ago', 'Posted Hours Ago', 'Salary Range',
-    'Insights', 'Company Logo URL', 'Source', 'Date Added', 'Status', 'Applied Date', 'Notes',
+    'Insights', #'Company Logo URL', # REMOVED
+    'Source', 'Date Added', 'Status', 'Applied Date', 'Notes',
+    # Phase 2 Detailed Info
     'Applicant Count', 'Job Description HTML', 'Job Description Plain Text', 'About Company',
     'Date Scraped Detailed', 'Posted Ago Text Detailed', 'Company LinkedIn URL', 'Company Industry',
-    'Company Size', 'Company LinkedIn Members', 'Company Followers', 'Hiring Team Member 1 Name',
-    'Hiring Team Member 1 Profile URL', 'Hiring Team Member 2 Name', 'Hiring Team Member 2 Profile URL',
-    'Skills Required', # Kept for compatibility, maybe populated by phase 2?
-    # Phase 3 - Text format outputs
+    'Company Size', 'Company LinkedIn Members', 'Company Followers',
+    'Hiring Team Member 1 Name', # Member 2 info appended here if found
+    'Hiring Team Member 1 Profile URL', # Member 2 info appended here if found
+    #'Hiring Team Member 2 Name', # REMOVED
+    #'Hiring Team Member 2 Profile URL', # REMOVED
+    'Scraping Issues', # NEW (Proposal #7) - For Phase 2 issues
+    #'Skills Required', # REMOVED (Using AI extracted skills)
+    # Phase 3 - AI Extracted Text Outputs
     'Extracted Responsibilities', 'Extracted Required Skills', 'Extracted Preferred Skills',
     'Extracted Experience Level', 'Extracted Key Qualifications', 'Extracted Company Description',
     # Phase 3 - AI Analysis Outputs
-    'AI Match Score', # Original overall score (0-5)
-    'AI Score Justification', # Combined text justification
-    'AI Strengths', # Bulleted text
-    'AI Areas for Improvement', # Bulleted text
-    'AI Actionable Recommendations', # Bulleted text + Evaluation Breakdown
-    # Phase 3 - NEW DETAILED SCORE COLUMNS
-    'Keyword Match Score',      # Numerical score (e.g., 0.0 to 1.0)
-    'Achievements Score',       # Numerical score
-    'Summary Quality Score',    # Numerical score
-    'Structure Score',          # Numerical score
-    'Tools Certs Score',        # Numerical score
-    'Total Match Score',        # Calculated sum for threshold check
+    'AI Match Score', 'AI Score Justification', 'AI Strengths', 'AI Areas for Improvement',
+    'AI Actionable Recommendations',
+    # Phase 3 - Detailed Score Columns
+    'Keyword Match Score', 'Achievements Score', 'Summary Quality Score',
+    'Structure Score', 'Tools Certs Score', 'Total Match Score',
     # Phase 4 Tailoring Output
     'Generated Tailored Summary', 'Generated Tailored Bullets', 'Generated Tailored Skills List',
-    'Tailored HTML Path', 'Tailored PDF Path'
+    'Tailored HTML Path', 'Tailored PDF Path',
+    'Tailored PDF Pages', # NEW (Proposal #8)
+    # Phase 5 Rescoring Output
+    'Tailored Resume Score', # NEW (Proposal #10)
+    'Score Change', # NEW (Proposal #10)
+    'Tailoring Effectiveness Status', # NEW (Proposal #10)
+    'Retailoring Attempts', # NEW (Proposal #10)
 ]
+
 
 # --- Helper Functions ---
 
@@ -74,10 +82,14 @@ def get_random_delay(config, delay_type="medium"):
 
     return base + random.uniform(0, variance)
 
+# MODIFIED (Proposal #2): Enhanced Chrome Debugger Connection Handling
 def setup_selenium_driver(config):
-    """Connects Selenium to an existing Chrome instance using config."""
+    """Connects Selenium to an existing Chrome instance using config, with enhanced error handling."""
     driver_path = config['selenium']['chromedriver_path']
     port = config['selenium']['debugger_port']
+    max_retries = 3
+    retry_count = 0
+
     logging.info(f"Attempting to connect to existing Chrome on port {port}...")
     logging.info(f"Using ChromeDriver path: {driver_path}")
 
@@ -88,210 +100,324 @@ def setup_selenium_driver(config):
     service = Service(executable_path=driver_path)
     options = webdriver.ChromeOptions()
     options.add_experimental_option("debuggerAddress", f"localhost:{port}")
+    # Optional: Reduce log noise
+    options.add_argument("--log-level=3")
+    # options.add_experimental_option('excludeSwitches', ['enable-logging']) # Suppress DevTools listening message
 
-    # --- Alternative ways to potentially reduce logging (Use if needed, but often not necessary) ---
-    # options.add_argument("--log-level=3") # Sets minimal logging level for Chrome itself
-    # options.add_argument("--silent")      # Can sometimes help reduce ChromeDriver output
-    # --------------------------------------------------------------------------------------------
+    while retry_count < max_retries:
+        try:
+            driver = webdriver.Chrome(service=service, options=options)
+            logging.info("Successfully connected to Chrome debugger.")
+            # Basic check
+            time.sleep(0.5)
+            try:
+                current_url = driver.current_url
+                if not current_url:
+                    logging.warning("Connected, but could not get current URL. Browser might be stuck or unresponsive.")
+                elif "linkedin.com" not in current_url:
+                    logging.warning(f"Connected, but the active tab is not LinkedIn ({current_url}). Ensure LinkedIn is open and active.")
+                else:
+                    logging.info(f"Confirmed connection on a LinkedIn page: {current_url}")
+            except WebDriverException as url_err:
+                 logging.warning(f"Connected, but encountered error getting current URL: {url_err}. Browser might be initializing.")
+            return driver # Successful connection
 
-    try:
-        driver = webdriver.Chrome(service=service, options=options)
-        logging.info("Successfully connected to Chrome debugger.")
-        # Basic check
-        time.sleep(0.5)
-        if not driver.current_url:
-            logging.warning("Connected, but could not get current URL. Browser might be stuck.")
-        elif "linkedin.com" not in driver.current_url:
-            logging.warning(f"Connected, but the active tab is not LinkedIn ({driver.current_url}). Ensure LinkedIn is open and active.")
-        else:
-            logging.info(f"Confirmed connection on a LinkedIn page: {driver.current_url}")
-        return driver
-    except WebDriverException as e:
-        # Improved error message for this specific connection type
-        if "cannot parse capability" in str(e) or "unrecognized chrome option" in str(e):
-             logging.error(f"WebDriverException connecting to Chrome (Capability/Option Error). Check Chrome/ChromeDriver compatibility and options. Error: {e}")
-        elif "failed to connect" in str(e) or "timed out" in str(e):
-             logging.error(f"WebDriverException connecting to Chrome on port {port}. Is Chrome running with --remote-debugging-port={port}? Is the port correct? Error: {e}")
-        else:
-             logging.error(f"WebDriverException connecting to Chrome: {e}")
-        # Log less verbose traceback for known connection issues unless debugging is needed
-        # logging.error(traceback.format_exc())
-        return None
-    except Exception as e:
-        logging.error(f"An unexpected error occurred during Selenium setup: {e}")
-        logging.error(traceback.format_exc())
-        return None
+        except WebDriverException as e:
+            is_connection_error = any(err_msg in str(e).lower() for err_msg in [
+                "failed to connect", "timed out", "cannot connect", "connection refused"
+            ])
+
+            if is_connection_error:
+                retry_count += 1
+                logging.error(f"WebDriverException connecting to Chrome on port {port} (Attempt {retry_count}/{max_retries}).")
+                logging.error(f"Error details: {e}")
+
+                if retry_count >= max_retries:
+                    logging.error("Maximum connection retries reached.")
+                    # Print detailed instructions only on final failure
+                    print("\n" + "="*60)
+                    print("!!!!!! FAILED TO CONNECT TO CHROME DEBUGGER !!!!!!")
+                    print("Please ensure:")
+                    print(" 1. ALL other Chrome instances are CLOSED.")
+                    print(f" 2. Chrome was started MANUALLY using the command line with port {port}.")
+                    print(" 3. The correct command was used for your OS:")
+                    print("    Windows (Command Prompt - Adjust path if needed):")
+                    print(f'       "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe" --remote-debugging-port={port} --user-data-dir="C:\\ChromeDebugProfile"')
+                    print("    macOS (Terminal):")
+                    print(f'       /Applications/Google\\ Chrome.app/Contents/MacOS/Google\\ Chrome --remote-debugging-port={port} --user-data-dir="$HOME/ChromeDebugProfile"')
+                    print("    Linux (Terminal):")
+                    print(f'       google-chrome --remote-debugging-port={port} --user-data-dir="$HOME/ChromeDebugProfile"')
+                    print(" 4. You logged into LinkedIn MANUALLY in that specific Chrome window.")
+                    print("="*60 + "\n")
+                    # No interactive retry prompt in this version, exits after max retries.
+                    return None
+                else:
+                    logging.info(f"Retrying connection in 10 seconds...")
+                    time.sleep(10)
+                    continue # Go to next iteration of the while loop
+
+            else:
+                # Handle other WebDriverExceptions (like capability errors)
+                logging.error(f"WebDriverException (Non-connection related) during setup: {e}")
+                # logging.error(traceback.format_exc()) # Uncomment for more detail if needed
+                return None # Exit on non-connection WebDriver errors
+
+        except Exception as e:
+            logging.error(f"An unexpected error occurred during Selenium setup: {e}")
+            logging.error(traceback.format_exc())
+            return None
+
+    return None # Should only be reached if max_retries exceeded
 
 def parse_posted_ago(text):
     """Parses 'Posted Ago' text into days and hours."""
-    if not isinstance(text, str):
-        return -1, -1
+    # (No changes needed in this function)
+    if not isinstance(text, str): return -1, -1
     text_lower = text.lower()
-    days = -1
-    hours = -1
-
-    if "just now" in text_lower:
-        days = 0
-        hours = 0
-    elif "yesterday" in text_lower:
-        days = 1
-        hours = 0
+    days, hours = -1, -1
+    if "just now" in text_lower: days, hours = 0, 0
+    elif "yesterday" in text_lower: days, hours = 1, 0
     else:
-        # Regex to find number and unit (hour, day, week, month, year)
         match = re.search(r'(\d+)\s+(hour|day|week|month|year)s?', text_lower)
         if match:
-            num = int(match.group(1))
-            unit = match.group(2)
-            if unit == 'hour':
-                hours = num
-                days = hours // 24
-                hours %= 24
-            elif unit == 'day':
-                days = num
-                hours = 0
-            elif unit == 'week':
-                days = num * 7
-                hours = 0
-            elif unit == 'month':
-                days = num * 30 # Approximation
-            elif unit == 'year':
-                days = num * 365 # Approximation
-            else: # Should not happen with the regex, but safety first
-                days = -1
-                hours = -1
-                logging.warning(f"Unexpected unit '{unit}' in parse_posted_ago for text: {text}")
-
-    # Logging the parsed result can be useful for debugging date logic
-    # logging.debug(f"Parsed '{text}' -> Days: {days}, Hours: {hours}")
+            num, unit = int(match.group(1)), match.group(2)
+            if unit == 'hour': hours, days = num % 24, num // 24
+            elif unit == 'day': days, hours = num, 0
+            elif unit == 'week': days, hours = num * 7, 0
+            elif unit == 'month': days = num * 30 # Approx
+            elif unit == 'year': days = num * 365 # Approx
     return days, hours
 
+# MODIFIED (Proposal #11): Removed Company Logo URL and Skills Required extraction
+'''def extract_job_data_from_card(card_element, config):
+
+    """Extracts detailed data points from a single job card element using selectors from config."""
+    selectors = config['selectors']
+    verbose = config['phase1']['verbose_card_extraction']
+    if verbose: logging.debug("Processing card...")
+
+    data = { # Initialize with defaults, removed fields
+        'Job ID': 'N/A', 'Title': 'N/A', 'Company': 'N/A', 'Location': 'N/A',
+        'Workplace Type': 'N/A', 'Link': 'N/A', 'Easy Apply': False, 'Promoted': False,
+        'Viewed': False, 'Early Applicant': False, 'Verified': False,
+        'Posted Ago Text': 'N/A', 'Posted Days Ago': -1, 'Posted Hours Ago': -1,
+        'Salary Range': 'N/A', 'Insights': 'N/A', #'Company Logo URL': 'N/A', # REMOVED
+        'Source': 'LinkedIn Job Search'
+    }
+
+    # --- Essential Info: Link, Title, Job ID ---
+    # (Logic remains the same)
+    try:
+        link_element = card_element.find_element(By.CSS_SELECTOR, selectors['job_card_link'])
+        data['Link'] = link_element.get_attribute('href')
+        if data['Link'] and '?' in data['Link']: data['Link'] = data['Link'].split('?')[0]
+        try: data['Title'] = link_element.find_element(By.CSS_SELECTOR, selectors['job_card_title']).text.strip()
+        except NoSuchElementException: data['Title'] = link_element.text.strip()
+        try:
+            parent_li = link_element.find_element(By.XPATH, './ancestor::li')
+            data['Job ID'] = parent_li.get_attribute('data-occludable-job-id') or parent_li.get_attribute('data-entity-urn')
+            if data['Job ID'] and 'jobPosting:' in data['Job ID']: data['Job ID'] = data['Job ID'].split(':')[-1]
+        except Exception: data['Job ID'] = 'N/A'
+        if not data['Link'] or data['Link'] == 'N/A' or not data['Title'] or data['Title'] == 'N/A':
+             logging.warning(f"Card skipped: Missing essential Link ('{data['Link']}') or Title ('{data['Title']}').")
+             return None
+        if verbose: logging.debug(f"  Found Link: {data['Link']}, Title: {data['Title']}, JobID: {data['Job ID']}")
+    except NoSuchElementException: logging.warning(f"Card skipped: Essential selector '{selectors['job_card_link']}' failed."); return None
+    except Exception as e: logging.error(f"Card skipped: Unexpected error getting essential info: {e}", exc_info=True); return None
+
+    # --- Other Fields (Robust extraction) ---
+    # (Logic remains the same for Company, Location, Verified, Footer, Salary, Insights)
+    try: data['Company'] = card_element.find_element(By.CSS_SELECTOR, selectors['job_card_company']).text.strip()
+    except Exception: data['Company'] = 'N/A (Company)'
+    try:
+        location_element = card_element.find_element(By.CSS_SELECTOR, selectors['job_card_location'])
+        job_location_raw = location_element.text.strip()
+        match = re.search(r'\((On-site|Remote|Hybrid)\)', job_location_raw, re.IGNORECASE)
+        if match:
+            data['Workplace Type'] = match.group(1).capitalize()
+            data['Location'] = job_location_raw.replace(match.group(0), '').strip(' ·,')
+        else: data['Location'] = job_location_raw
+        if data['Company'] != 'N/A (Company)' and data['Company'] in data['Location']: data['Location'] = data['Location'].replace(data['Company'], '').strip(' ·,')
+    except Exception: data['Location'] = 'N/A (Location)'
+    try: card_element.find_element(By.CSS_SELECTOR, selectors['job_card_verified_icon']); data['Verified'] = True
+    except NoSuchElementException: data['Verified'] = False
+    except Exception: data['Verified'] = False
+
+    # --- Logo: REMOVED ---
+    # try:
+    #     logo_img = card_element.find_element(By.CSS_SELECTOR, selectors['job_card_logo'])
+    #     data['Company Logo URL'] = logo_img.get_attribute('src')
+    # except Exception: data['Company Logo URL'] = 'N/A'
+
+    try: # Footer Info
+        footer_element = card_element.find_element(By.CSS_SELECTOR, selectors['job_card_footer_list'])
+        footer_items = footer_element.find_elements(By.TAG_NAME, 'li')
+        for item in footer_items:
+            item_text_lower = item.text.lower()
+            if "easy apply" in item_text_lower: data['Easy Apply'] = True
+            if "viewed" in item_text_lower: data['Viewed'] = True
+            if "promoted" in item_text_lower: data['Promoted'] = True
+            if "early applicant" in item_text_lower: data['Early Applicant'] = True
+            try:
+                time_tag = item.find_element(By.TAG_NAME, 'time')
+                data['Posted Ago Text'] = time_tag.text.strip()
+            except NoSuchElementException:
+                 if any(word in item_text_lower for word in ["ago", "hour", "day", "week", "month", "yesterday", "just now"]):
+                     data['Posted Ago Text'] = item.text.strip()
+        if data['Posted Ago Text'] != 'N/A': data['Posted Days Ago'], data['Posted Hours Ago'] = parse_posted_ago(data['Posted Ago Text'])
+    except NoSuchElementException: pass
+    except Exception as footer_err: logging.warning(f"  Error parsing footer info: {footer_err}")
+
+    try: data['Salary Range'] = card_element.find_element(By.CSS_SELECTOR, selectors['job_card_salary']).text.strip()
+    except Exception: data['Salary Range'] = 'N/A'
+    try: data['Insights'] = card_element.find_element(By.CSS_SELECTOR, selectors['job_card_insights']).text.strip()
+    except Exception: data['Insights'] = 'N/A'
+
+    # --- Skills Required: REMOVED ---
+
+    if verbose: logging.debug(f"  Extracted Data: {data}")
+    return data
+'''
+
+# File: phase1_list_scraper.py
+
+# --- Helper Function (Recommended) ---
+def safe_find_element(parent_element, by, selector):
+    try:
+        return parent_element.find_element(by, selector)
+    except NoSuchElementException:
+        return None
+
+# --- CORRECTED extract_job_data_from_card ---
 def extract_job_data_from_card(card_element, config):
     """Extracts detailed data points from a single job card element using selectors from config."""
     selectors = config['selectors']
     verbose = config['phase1']['verbose_card_extraction']
     if verbose: logging.debug("Processing card...")
 
-    data = { # Initialize with defaults
+    data = { # Initialize with correct defaults
         'Job ID': 'N/A', 'Title': 'N/A', 'Company': 'N/A', 'Location': 'N/A',
-        'Workplace Type': 'N/A', 'Link': 'N/A', 'Easy Apply': False, 'Promoted': False,
-        'Viewed': False, 'Early Applicant': False, 'Verified': False,
-        'Posted Ago Text': 'N/A', 'Posted Days Ago': -1, 'Posted Hours Ago': -1,
-        'Salary Range': 'N/A', 'Insights': 'N/A', 'Company Logo URL': 'N/A',
-        'Source': 'LinkedIn Job Search' # Hardcoded source for this phase
+        'Workplace Type': 'N/A', 'Link': 'N/A', 'Easy Apply': False, 'Promoted': False, # Default FALSE
+        'Viewed': False, 'Early Applicant': False, 'Verified': False, # Default FALSE
+        'Posted Ago Text': '', 'Posted Days Ago': -1, 'Posted Hours Ago': -1,
+        'Salary Range': '', 'Insights': '',
+        'Source': 'LinkedIn Job Search'
     }
 
     # --- Essential Info: Link, Title, Job ID ---
     try:
-        link_element = card_element.find_element(By.CSS_SELECTOR, selectors['job_card_link'])
+        # Use the original, more general link selectors
+        link_element = safe_find_element(card_element, By.CSS_SELECTOR, selectors['job_card_link'].split(',')[0]) or \
+                       safe_find_element(card_element, By.CSS_SELECTOR, selectors['job_card_link'].split(',')[1]) or \
+                       safe_find_element(card_element, By.CSS_SELECTOR, selectors['job_card_link'].split(',')[2])
+
+        if not link_element:
+            logging.warning("Card skipped: Could not find primary link element using any selector.")
+            return None
+
         data['Link'] = link_element.get_attribute('href')
-        if data['Link'] and '?' in data['Link']:
-            data['Link'] = data['Link'].split('?')[0] # Clean URL params
+        if data['Link'] and '?' in data['Link']: data['Link'] = data['Link'].split('?')[0]
 
-        # Extract Title (Try strong tag first, then fallback)
-        try:
-            data['Title'] = link_element.find_element(By.CSS_SELECTOR, selectors['job_card_title']).text.strip()
-        except NoSuchElementException:
-            data['Title'] = link_element.text.strip() # Fallback to link text
+        # Extract Title
+        title_el = safe_find_element(link_element, By.CSS_SELECTOR, selectors['job_card_title'])
+        data['Title'] = title_el.text.strip() if title_el else link_element.text.strip() # Fallback to link text
 
-        # Extract Job ID (often on the parent element)
-        try:
-            # Go up one level from the link to the container usually holding the ID
-            parent_li = link_element.find_element(By.XPATH, './ancestor::li')
-            data['Job ID'] = parent_li.get_attribute('data-occludable-job-id') or parent_li.get_attribute('data-entity-urn') # Try common attributes
-            if data['Job ID'] and 'jobPosting:' in data['Job ID']:
-                data['Job ID'] = data['Job ID'].split(':')[-1] # Extract numeric ID
-        except Exception:
-            logging.debug("Could not find Job ID attribute via common methods.", exc_info=True)
-            data['Job ID'] = 'N/A' # Ensure it's marked N/A if extraction failed
+        # Extract Job ID
+        job_id_urn = card_element.get_attribute('data-entity-urn')
+        job_id_occludable = card_element.get_attribute('data-occludable-job-id')
+        if job_id_urn and 'jobPosting:' in job_id_urn: data['Job ID'] = job_id_urn.split(':')[-1]
+        elif job_id_occludable: data['Job ID'] = job_id_occludable
+        else: id_match = re.search(r'/jobs/view/(\d+)/', data['Link'] or ""); data['Job ID'] = id_match.group(1) if id_match else 'N/A'
 
-        if not data['Link'] or data['Link'] == 'N/A' or not data['Title'] or data['Title'] == 'N/A':
-             logging.warning(f"Card skipped: Missing essential Link ('{data['Link']}') or Title ('{data['Title']}').")
+        if not data['Link'] or not data['Title'] or data['Job ID'] == 'N/A':
+             logging.warning(f"Card skipped: Missing essential Link/Title/JobID.")
              return None
-
         if verbose: logging.debug(f"  Found Link: {data['Link']}, Title: {data['Title']}, JobID: {data['Job ID']}")
+    except Exception as e: logging.error(f"Card skipped: Unexpected error getting essential info: {e}", exc_info=True); return None
 
-    except NoSuchElementException:
-        logging.warning(f"Card skipped: Essential selector '{selectors['job_card_link']}' failed.")
-        return None
-    except Exception as e:
-        logging.error(f"Card skipped: Unexpected error getting essential info: {e}", exc_info=True)
-        return None
+    # --- Other Fields ---
+    company_el = safe_find_element(card_element, By.CSS_SELECTOR, selectors['job_card_company'])
+    data['Company'] = company_el.text.strip() if company_el else 'N/A'
 
-    # --- Other Fields (Robust extraction with individual try-except) ---
-    try:
-        data['Company'] = card_element.find_element(By.CSS_SELECTOR, selectors['job_card_company']).text.strip()
-    except Exception: data['Company'] = 'N/A (Company)' # Indicate failed field
+    # Location: Use the original selector logic but handle potential errors getting span
+    location_li_el = safe_find_element(card_element, By.CSS_SELECTOR, "ul.job-card-container__metadata-wrapper li:first-child")
+    if location_li_el:
+        location_span_el = safe_find_element(location_li_el, By.TAG_NAME, "span") # Find span within the li
+        if location_span_el:
+            job_location_raw = location_span_el.text.strip()
+            match = re.search(r'\((On-site|Remote|Hybrid)\)', job_location_raw, re.IGNORECASE)
+            if match: data['Workplace Type'] = match.group(1).capitalize(); data['Location'] = job_location_raw.replace(match.group(0), '').strip(' ·,')
+            else: data['Location'] = job_location_raw
+            if data['Company'] != 'N/A' and data['Company'] in data['Location']: data['Location'] = data['Location'].replace(data['Company'], '').strip(' ·,')
+        else: data['Location'] = location_li_el.text.strip() # Fallback to LI text if span fails
+    else: data['Location'] = 'N/A'
 
-    try:
-        location_element = card_element.find_element(By.CSS_SELECTOR, selectors['job_card_location'])
-        job_location_raw = location_element.text.strip()
-        # Extract Workplace Type (On-site, Remote, Hybrid) if present
-        match = re.search(r'\((On-site|Remote|Hybrid)\)', job_location_raw, re.IGNORECASE)
-        if match:
-            data['Workplace Type'] = match.group(1).capitalize()
-            data['Location'] = job_location_raw.replace(match.group(0), '').strip(' ·,') # Remove type from location
-        else:
-            data['Location'] = job_location_raw
-        # Remove company name if it appears in location string
-        if data['Company'] != 'N/A (Company)' and data['Company'] in data['Location']:
-            data['Location'] = data['Location'].replace(data['Company'], '').strip(' ·,')
-    except Exception: data['Location'] = 'N/A (Location)'
+    # --- Verified Badge ---
+    # Search within the card_element context
+    verified_el = safe_find_element(card_element, By.CSS_SELECTOR, selectors['job_card_verified_icon'])
+    data['Verified'] = bool(verified_el) # True only if element is found
 
-    try: # Verified Badge Check
-        card_element.find_element(By.CSS_SELECTOR, 'svg[data-test-icon="verified-small"]')
-        data['Verified'] = True
-    except NoSuchElementException: data['Verified'] = False
-    except Exception: data['Verified'] = False # Error implies not verified
+    # --- Footer Info ---
+    footer_list_el = safe_find_element(card_element, By.CSS_SELECTOR, selectors['job_card_footer_list'])
+    posted_ago_text = '' # Initialize as empty string
+    if footer_list_el:
+        try:
+            # Try finding the time tag directly within the footer list first
+            time_tag = safe_find_element(footer_list_el, By.TAG_NAME, 'time')
+            if time_tag:
+                posted_ago_text = time_tag.text.strip()
+                if verbose: logging.debug(f"  Found Posted Ago via <time>: '{posted_ago_text}'")
 
-    try: # Logo
-        logo_img = card_element.find_element(By.CSS_SELECTOR, selectors['job_card_logo'])
-        data['Company Logo URL'] = logo_img.get_attribute('src')
-    except Exception: data['Company Logo URL'] = 'N/A'
+            # Check list items for boolean flags and date fallback
+            footer_items = footer_list_el.find_elements(By.TAG_NAME, 'li') # Get all items
+            for item in footer_items:
+                item_text = item.text # Get text once per item
+                item_text_lower = item_text.lower()
+                # Use precise checks for flags - check if the *whole* text matches common patterns
+                if "easy apply" == item_text_lower.strip(): data['Easy Apply'] = True
+                if "promoted" == item_text_lower.strip(): data['Promoted'] = True
+                # Check for "Viewed" state (often bold) - check if the element itself is bold maybe?
+                if "viewed" == item_text_lower.strip():
+                     data['Viewed'] = True
+                     # Check if the element has a bold style (more reliable than just text)
+                     try:
+                         if item.value_of_css_property('font-weight') in ['700', 'bold']:
+                              data['Viewed'] = True
+                              if verbose: logging.debug("  Found 'Viewed' state (bold).")
+                         else: data['Viewed'] = False # Reset if not bold
+                     except: pass # Ignore style check errors
+                if "early applicant" == item_text_lower.strip(): data['Early Applicant'] = True
 
-    try: # Footer Info (Easy Apply, Posted Ago, etc.)
-        footer_element = card_element.find_element(By.CSS_SELECTOR, selectors['job_card_footer_list'])
-        footer_items = footer_element.find_elements(By.TAG_NAME, 'li')
-        for item in footer_items:
-            item_text = item.text # Get text once
-            item_text_lower = item_text.lower() # Lowercase for checks
-            if "easy apply" in item_text_lower: data['Easy Apply'] = True
-            if "viewed" in item_text_lower: data['Viewed'] = True
-            if "promoted" in item_text_lower: data['Promoted'] = True
-            if "early applicant" in item_text_lower: data['Early Applicant'] = True
-            # Find Posted Ago text (check time tag first, then common keywords)
-            try:
-                time_tag = item.find_element(By.TAG_NAME, 'time')
-                data['Posted Ago Text'] = time_tag.text.strip()
-            except NoSuchElementException:
-                 if any(word in item_text_lower for word in ["ago", "hour", "day", "week", "month", "yesterday", "just now"]):
-                     # Use the full text of the list item if it seems like a date string
-                     data['Posted Ago Text'] = item_text.strip()
+                # Fallback for date text ONLY if <time> tag wasn't found above
+                if not posted_ago_text and any(word in item_text_lower for word in ["ago", "hour", "day", "week", "month", "yesterday", "just now"]):
+                    posted_ago_text = item_text.strip()
+                    if verbose: logging.debug(f"  Found Posted Ago via LI text fallback: '{posted_ago_text}'")
+                    # Don't break here, continue checking other LIs for boolean flags
 
-        # Parse the found text after checking all items
-        if data['Posted Ago Text'] != 'N/A':
-            data['Posted Days Ago'], data['Posted Hours Ago'] = parse_posted_ago(data['Posted Ago Text'])
+        except Exception as footer_err:
+            logging.warning(f"  Error parsing footer info: {footer_err}")
 
-    except NoSuchElementException:
-         if verbose: logging.debug("  Footer list not found.")
-    except Exception as footer_err:
-         logging.warning(f"  Error parsing footer info: {footer_err}")
+    # Process posted_ago_text if found
+    if posted_ago_text:
+        data['Posted Ago Text'] = posted_ago_text
+        data['Posted Days Ago'], data['Posted Hours Ago'] = parse_posted_ago(posted_ago_text)
+    elif verbose:
+         logging.debug("  Posted Ago text not found in footer.")
 
-    try: # Salary
-        data['Salary Range'] = card_element.find_element(By.CSS_SELECTOR, selectors['job_card_salary']).text.strip()
-    except NoSuchElementException: data['Salary Range'] = 'N/A'
-    except Exception: data['Salary Range'] = 'N/A'
+    # --- Salary ---
+    salary_el = safe_find_element(card_element, By.CSS_SELECTOR, selectors['job_card_salary'])
+    data['Salary Range'] = salary_el.text.strip() if salary_el else ''
 
-    try: # Insights
-        data['Insights'] = card_element.find_element(By.CSS_SELECTOR, selectors['job_card_insights']).text.strip()
-    except NoSuchElementException: data['Insights'] = 'N/A'
-    except Exception: data['Insights'] = 'N/A'
+    # --- Insights ---
+    insights_el = safe_find_element(card_element, By.CSS_SELECTOR, selectors['job_card_insights'])
+    data['Insights'] = insights_el.text.strip() if insights_el else ''
 
-    if verbose: logging.debug(f"  Extracted Data: {data}")
+    if verbose: logging.debug(f"  Final Extracted Data: {data}")
     return data
 
-# **** START REPLACEMENT for search_and_scrape_jobs function in phase1_list_scraper.py ****
-def search_and_scrape_jobs(driver: webdriver, config: dict) -> list:
-    """Searches jobs, handles pagination (URL preferred, button fallback), scrapes results, explicit waits."""
+# MODIFIED (Proposals #3, #5, #6): Update logging, handle min unique target, track totals
+def search_and_scrape_jobs(driver: webdriver, config: dict) -> tuple[list, int, int]:
+    """Searches jobs, handles pagination, scrapes results, respects limits, tracks added/skipped counts."""
     # --- Config Extraction ---
     phase1_cfg = config['phase1']
     selenium_cfg = config['selenium']
@@ -306,34 +432,34 @@ def search_and_scrape_jobs(driver: webdriver, config: dict) -> list:
     save_each_page = phase1_cfg['save_after_each_page']
     wait_time_container = selenium_cfg['wait_time_long']
     wait_time_cards = selenium_cfg['wait_time_short']
-    wait_time_element = selenium_cfg.get('wait_time_element', 3) # Shorter wait for specific element within card
+    wait_time_element = selenium_cfg.get('wait_time_element', 3)
     jobs_per_page_limit = phase1_cfg.get('jobs_per_page_limit', 0) or None
     total_jobs_limit = phase1_cfg.get('total_jobs_limit', 0) or None
-    jobs_per_linkedin_page = 25 # LinkedIn typically shows 25 jobs per page/start increment
+    minimum_unique_jobs_target = phase1_cfg.get('minimum_unique_jobs_target', 0) or 0 # Proposal #6
+    jobs_per_linkedin_page = 25
 
     date_filter_map = {'1': None, '2': 'r2592000', '3': 'r604800', '4': 'r86400'}
     date_filter_url_param = date_filter_map.get(date_filter_choice)
 
     logging.info("Starting job search...")
     logging.info(f"Query='{search_query}', Location='{location_text}', GeoID='{geo_id}', DateFilter='{date_filter_url_param}'")
-    logging.info(f"ScrapeAll={scrape_all}, MaxPages={max_pages}, JobsPerPageLimit={jobs_per_page_limit}, TotalJobsLimit={total_jobs_limit}")
+    logging.info(f"ScrapeAll={scrape_all}, MaxPages={max_pages}, TotalJobsLimit={total_jobs_limit}, MinUniqueTarget={minimum_unique_jobs_target}")
 
-    all_scraped_jobs = []
-    processed_job_ids_this_session = set()
-    total_unique_jobs_added_session = 0
+    all_scraped_jobs_data = [] # Stores dicts of job data scraped THIS session
+    processed_job_ids_this_session = set() # Tracks Job IDs added to list THIS session
+    total_unique_jobs_added_session = 0 # Counter for Proposal #6
+    total_added_from_excel_func = 0 # Counter for Proposal #5 summary
+    total_skipped_from_excel_func = 0 # Counter for Proposal #5 summary
 
-    # Construct Base URL (without start param initially)
     base_search_url = f"https://www.linkedin.com/jobs/search/?keywords={quote_plus(search_query)}"
     if location_text: base_search_url += f"&location={quote_plus(location_text)}"
     if geo_id: base_search_url += f"&geoId={geo_id}"
     base_search_url += "&origin=JOB_SEARCH_PAGE_JOB_FILTER&refresh=true"
     if date_filter_url_param: base_search_url += f"&f_TPR={date_filter_url_param}"
-
     logging.info(f"Base Search URL: {base_search_url}")
 
     current_page_number = 1
     try:
-        # --- Initial Navigation (Page 1 / start=0) ---
         page_url = f"{base_search_url}&start=0"
         logging.info(f"Navigating to initial search URL (Page 1): {page_url}")
         driver.get(page_url)
@@ -342,54 +468,54 @@ def search_and_scrape_jobs(driver: webdriver, config: dict) -> list:
 
         # --- Main Scraping Loop ---
         while True:
-            if total_jobs_limit and total_unique_jobs_added_session >= total_jobs_limit: logging.info(f"Reached total jobs limit ({total_jobs_limit}). Stopping."); break
-            if scrape_all and current_page_number > max_pages: logging.info(f"Reached max pages limit ({max_pages}). Stopping."); break
-
             logging.info(f"--- Processing Page {current_page_number} ---")
-            # Validate we are on the correct page (optional check)
+
+            # Check Stop Conditions (BEFORE scraping page) - Proposal #6 logic integrated
+            # 1. Max pages reached?
+            if current_page_number > max_pages:
+                logging.info(f"Reached max pages limit ({max_pages}). Stopping.")
+                break
+            # 2. Minimum unique target met AND total limit reached (if total limit exists)?
+            minimum_target_met = total_unique_jobs_added_session >= minimum_unique_jobs_target
+            total_limit_applies = total_jobs_limit and total_jobs_limit > 0
+            total_limit_reached = total_limit_applies and total_unique_jobs_added_session >= total_jobs_limit
+            if minimum_target_met and total_limit_reached:
+                 logging.info(f"Met minimum unique target ({minimum_unique_jobs_target}) and reached total jobs limit ({total_jobs_limit}). Stopping.")
+                 break
+            # 3. Only scraping first page? (Check after first page processed)
+            if not scrape_all and current_page_number > 1:
+                 logging.info("scrape_all_pages is False. Stopping after first page.")
+                 break
+
+            # Validate URL (optional check)
             expected_start_param = f"start={(current_page_number - 1) * jobs_per_linkedin_page}"
             if expected_start_param not in driver.current_url and current_page_number > 1:
-                logging.warning(f"Current URL ({driver.current_url}) doesn't contain expected '{expected_start_param}'. Pagination might be stuck.")
-                # Potentially break or try button click here if URL method failed
+                logging.warning(f"Current URL ({driver.current_url}) doesn't contain '{expected_start_param}'. Pagination check.")
 
+            # --- Wait for and Scroll Page Content ---
             jobs_list_container = None
             try:
-                # Wait for container and initial cards
                 logging.info(f"Waiting for job list container ('{selectors['job_list_container']}')...")
-                jobs_list_container = WebDriverWait(driver, wait_time_container).until(
-                    EC.presence_of_element_located((By.CSS_SELECTOR, selectors['job_list_container']))
-                )
-                logging.debug("Job list container found.")
+                jobs_list_container = WebDriverWait(driver, wait_time_container).until(EC.presence_of_element_located((By.CSS_SELECTOR, selectors['job_list_container'])))
                 logging.info(f"Waiting for job cards ('{selectors['job_card']}') within container...")
-                WebDriverWait(jobs_list_container, wait_time_cards).until(
-                    EC.presence_of_element_located((By.CSS_SELECTOR, selectors['job_card']))
-                )
+                WebDriverWait(jobs_list_container, wait_time_cards).until(EC.presence_of_element_located((By.CSS_SELECTOR, selectors['job_card'])))
                 logging.info(f"Initial cards present on page {current_page_number}.")
-
-                # --- Scrolling --- (Keep this for lazy loading)
+                # Scrolling logic (remains the same)
                 logging.info("Performing scrolls...")
                 scroll_increment = 800; scroll_pauses = 3; current_scroll = 0
                 page_height = driver.execute_script("return document.body.scrollHeight")
                 for _ in range(scroll_pauses):
-                     current_scroll += scroll_increment
-                     if current_scroll > page_height: current_scroll = page_height
+                     current_scroll += scroll_increment; current_scroll = min(current_scroll, page_height)
                      driver.execute_script(f"window.scrollTo(0, {current_scroll});")
-                     logging.debug(f" Scrolled to ~{current_scroll}px")
                      time.sleep(get_random_delay(config, "medium"))
                 driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
                 time.sleep(get_random_delay(config, "medium"))
                 logging.info("Scroll attempts finished.")
-
             except TimeoutException:
-                # (Keep existing timeout handling logic)
                 logging.warning(f"Timeout waiting for container or cards on page {current_page_number}.")
                 if current_page_number == 1:
-                    try:
-                        driver.find_element(By.XPATH, selectors['no_results_banner'])
-                        logging.info("'No matching jobs found' message detected. Stopping.")
-                        break
+                    try: driver.find_element(By.XPATH, selectors['no_results_banner']); logging.info("'No matching jobs found'. Stopping."); break
                     except NoSuchElementException: logging.error("Timeout on first page, no 'No matching jobs' message."); break
-                    except Exception as e: logging.error(f"Error checking 'No matching jobs': {e}"); break
                 else: logging.info("Timeout on subsequent page, assuming end of results."); break
 
             # --- Extract Data ---
@@ -403,332 +529,284 @@ def search_and_scrape_jobs(driver: webdriver, config: dict) -> list:
             if not job_cards: logging.warning("No card elements found after scroll. Stopping."); break
 
             page_extracted_count = 0
+            current_page_jobs_data = [] # Store jobs scraped from THIS page
+
             for i, card in enumerate(job_cards):
-                # Check Limits
-                if jobs_per_page_limit and page_extracted_count >= jobs_per_page_limit: logging.info(f"Reached jobs/page limit ({jobs_per_page_limit})."); break
-                if total_jobs_limit and total_unique_jobs_added_session >= total_jobs_limit: logging.info(f"Reached total jobs limit ({total_jobs_limit})."); total_unique_jobs_added_session = total_jobs_limit + 1; break
+                # Check Limits before processing card (respects total limit primarily for efficiency)
+                if total_limit_applies and total_unique_jobs_added_session >= total_jobs_limit:
+                    # Only break if min target is also met (otherwise continue to find unique)
+                    if minimum_target_met:
+                        logging.info(f"Reached total jobs limit ({total_jobs_limit}) after meeting minimum target. Stopping card processing for page.")
+                        break
+                if jobs_per_page_limit and page_extracted_count >= jobs_per_page_limit:
+                    logging.info(f"Reached jobs/page limit ({jobs_per_page_limit}).")
+                    break
 
                 logging.debug(f"Processing card {i+1}/{len(job_cards)}...")
                 try:
-                    # 1. Scroll card into view
                     driver.execute_script("arguments[0].scrollIntoView({block: 'center', behavior: 'smooth'});", card)
-                    time.sleep(0.6) # Wait for scroll animation
+                    time.sleep(0.6)
+                    try: WebDriverWait(card, wait_time_element).until(EC.presence_of_element_located((By.CSS_SELECTOR, selectors['job_card_link'])))
+                    except TimeoutException: logging.warning(f"Card {i+1}: Timed out waiting for link after scroll. Skipping."); continue
 
-                    # --- NEW: Explicit Wait for Link Element within Card ---
-                    try:
-                        WebDriverWait(card, wait_time_element).until(
-                           EC.presence_of_element_located((By.CSS_SELECTOR, selectors['job_card_link']))
-                        )
-                        logging.debug(f" Essential link found within card {i+1}.")
-                    except TimeoutException:
-                         logging.warning(f"Card {i+1}: Timed out waiting for essential link element ('{selectors['job_card_link']}') AFTER scrolling into view. Skipping card.")
-                         continue # Skip this card if the link doesn't appear
-                    # --- END NEW ---
-
-                    # 2. Extract data (now link should be present)
                     job_data = extract_job_data_from_card(card, config)
 
                     if job_data:
                         current_job_id = job_data.get('Job ID', 'N/A')
+                        # Check uniqueness within THIS SESSION only here
                         if current_job_id != 'N/A' and current_job_id not in processed_job_ids_this_session:
                             processed_job_ids_this_session.add(current_job_id)
-                            all_scraped_jobs.append(job_data)
+                            current_page_jobs_data.append(job_data) # Add to page list
                             page_extracted_count += 1
-                            total_unique_jobs_added_session += 1
-                        elif current_job_id == 'N/A': logging.warning(f"Card {i+1} extracted but has Job ID 'N/A'. Skipping.")
-                        else: logging.debug(f"Job ID {current_job_id} processed this session. Skipping.")
-                    else:
-                        # extract_job_data_from_card already logged the skip reason if link failed initially
-                        if 'Essential selector' not in str(logging.getLogger().handlers[0].stream): # Avoid double logging if already logged in extractor
-                           logging.warning(f"Card {i+1} did not yield valid data (possible structure mismatch inside?).")
+                            # Note: total_unique_jobs_added_session incremented after Excel check
+                        elif current_job_id != 'N/A':
+                             logging.debug(f"Job ID {current_job_id} already processed this session. Skipping card.")
+                        else: logging.warning(f"Card {i+1} extracted but has Job ID 'N/A'. Skipping.")
+                    else: logging.warning(f"Card {i+1} did not yield valid data.")
 
                 except StaleElementReferenceException: logging.warning(f"Card {i+1} stale. Skipping."); time.sleep(0.5); continue
                 except ElementNotInteractableException: logging.warning(f"Card {i+1} not interactable. Skipping."); continue
                 except Exception as card_err: logging.error(f"Error processing card {i+1}: {card_err}", exc_info=True)
 
-            logging.info(f"Extracted {page_extracted_count} new unique jobs from page {current_page_number}.")
+            # MODIFIED (Proposal #3): Update log message
+            logging.info(f"Extracted {page_extracted_count} job cards from page {current_page_number} (pre-deduplication).")
+
+            # Add unique jobs from THIS page to the overall list
+            all_scraped_jobs_data.extend(current_page_jobs_data)
+            # Update the session unique count based on jobs added to the list
+            total_unique_jobs_added_session = len(processed_job_ids_this_session)
+            logging.info(f"Session Total Unique Jobs Found So Far: {total_unique_jobs_added_session}")
+
 
             if save_each_page and page_extracted_count > 0:
-                 logging.info(f"Saving intermediate results...")
-                 if add_jobs_to_excel(all_scraped_jobs, config): logging.info("Intermediate save OK.")
-                 else: logging.error("Failed intermediate save."); # Optionally stop: return False
+                 logging.info(f"Saving intermediate results for page {current_page_number}...")
+                 # MODIFIED (Proposal #5): Capture counts from add_jobs_to_excel
+                 success_save, added_count, skipped_count = add_jobs_to_excel(current_page_jobs_data, config)
+                 if success_save:
+                     total_added_from_excel_func += added_count
+                     total_skipped_from_excel_func += skipped_count
+                     logging.info(f"Intermediate save OK (Added: {added_count}, Skipped Duplicates: {skipped_count}).")
+                 else:
+                     logging.error("Failed intermediate save. Stopping phase."); return [], 0, 0 # Critical failure
 
-            # Check limits again before pagination
-            if total_jobs_limit and total_unique_jobs_added_session >= total_jobs_limit: logging.info(f"Reached total jobs limit ({total_jobs_limit}). Stopping."); break
-            if not scrape_all: logging.info("scrape_all_pages is False. Stopping."); break
-            if page_extracted_count == 0 and current_page_number > 1: logging.info("No new jobs extracted. Assuming end."); break
+            # Check if we should stop pagination based on lack of new jobs (and scrape_all)
+            if page_extracted_count == 0 and scrape_all and current_page_number > 1:
+                logging.info(f"No new job cards extracted from page {current_page_number}. Assuming end of results.")
+                break
 
-            # --- Pagination: URL First, Button Fallback ---
+            # --- Pagination Logic ---
+            # (Remains the same: URL first, button fallback)
             current_page_number += 1
             next_start_index = (current_page_number - 1) * jobs_per_linkedin_page
             next_page_url = f"{base_search_url}&start={next_start_index}"
-            logging.info(f"Attempting pagination to Page {current_page_number} using URL: {next_page_url}")
-
+            logging.info(f"Attempting pagination to Page {current_page_number} using URL...")
             try:
                 driver.get(next_page_url)
-                logging.info(f"Waiting for Page {current_page_number} content to load via URL...")
-                # Add a check: Wait for the container to appear on the new page
-                WebDriverWait(driver, wait_time_container).until(
-                    EC.presence_of_element_located((By.CSS_SELECTOR, selectors['job_list_container']))
-                )
+                WebDriverWait(driver, wait_time_container).until(EC.presence_of_element_located((By.CSS_SELECTOR, selectors['job_list_container'])))
                 logging.info(f"Page {current_page_number} loaded successfully via URL.")
-                time.sleep(get_random_delay(config, "long")) # Wait after load
-
+                time.sleep(get_random_delay(config, "long"))
             except Exception as url_nav_err:
                 logging.warning(f"Navigation via URL to page {current_page_number} failed: {url_nav_err}")
-                logging.info(f"Attempting pagination to Page {current_page_number} using Button Click as fallback...")
-                # Reset page number as URL navigation failed
+                logging.info(f"Attempting pagination to Page {current_page_number} using Button Click fallback...")
                 current_page_number -= 1
                 next_page_number_to_click = current_page_number + 1
-
                 try:
                     pagination_controls = driver.find_element(By.CSS_SELECTOR, selectors['pagination_container'])
-                    # Scroll pagination into view just in case
                     driver.execute_script("arguments[0].scrollIntoView({block: 'center', behavior: 'smooth'});", pagination_controls)
                     time.sleep(get_random_delay(config, "short"))
-
                     next_page_button_selector = selectors['pagination_button_template'].format(next_page_number_to_click)
-                    logging.debug(f"Looking for fallback pagination button: '{next_page_button_selector}'")
-
-                    next_button = WebDriverWait(driver, selenium_cfg['wait_time_short']).until(
-                        EC.element_to_be_clickable((By.CSS_SELECTOR, next_page_button_selector))
-                    )
-                    logging.info(f"Found page {next_page_number_to_click} button (Fallback). Clicking...")
+                    next_button = WebDriverWait(driver, selenium_cfg['wait_time_short']).until(EC.element_to_be_clickable((By.CSS_SELECTOR, next_page_button_selector)))
                     driver.execute_script("arguments[0].click();", next_button)
-                    current_page_number = next_page_number_to_click # Update page number on successful click
+                    current_page_number = next_page_number_to_click
                     logging.info(f"Waiting for page {current_page_number} to load (Fallback)...")
                     time.sleep(get_random_delay(config, "long"))
-
-                except TimeoutException: logging.info(f"Fallback Button: Page {next_page_number_to_click} button timeout. Assuming end."); break
-                except ElementNotInteractableException: logging.warning(f"Fallback Button: Page {next_page_number_to_click} not interactable. Assuming end."); break
-                except Exception as page_err: logging.error(f"Fallback Button: Error clicking page {next_page_number_to_click}: {page_err}", exc_info=True); break
-
+                except Exception as page_err: logging.error(f"Fallback Button Click failed: {page_err}. Assuming end."); break
         # --- End Main Loop ---
 
-    except WebDriverException as e: logging.critical(f"WebDriverException during scraping: {e}", exc_info=True); raise e
-    except Exception as e: logging.error(f"Unexpected error during job search/scraping: {e}", exc_info=True); return []
+    except WebDriverException as e: logging.critical(f"WebDriverException during scraping: {e}", exc_info=True); raise e # Re-raise critical
+    except Exception as e: logging.error(f"Unexpected error during job search/scraping: {e}", exc_info=True); return [], 0, 0 # Return empty list and zero counts
+
+    # Final Excel save if not saving each page
+    if not save_each_page and all_scraped_jobs_data:
+         logging.info(f"Performing final save of {len(all_scraped_jobs_data)} scraped jobs...")
+         success_final, added_final, skipped_final = add_jobs_to_excel(all_scraped_jobs_data, config)
+         if success_final:
+             total_added_from_excel_func = added_final
+             total_skipped_from_excel_func = skipped_final
+             logging.info(f"Final save complete (Added: {added_final}, Skipped Duplicates: {skipped_final}).")
+         else:
+             logging.error("CRITICAL: Final Excel save failed.")
+             return [], 0, 0 # Indicate critical failure
 
     logging.info(f"Finished scraping job list. Total unique jobs found this session: {total_unique_jobs_added_session}")
-    return all_scraped_jobs
-# **** END REPLACEMENT for search_and_scrape_jobs function in phase1_list_scraper.py ****
+    # MODIFIED (Proposal #5): Return tracked counts
+    return all_scraped_jobs_data, total_added_from_excel_func, total_skipped_from_excel_func
 
-# **** START REPLACEMENT for add_jobs_to_excel function in phase1_list_scraper.py ****
+# MODIFIED (Proposals #4, #5): Remove individual duplicate log, return counts
 def add_jobs_to_excel(scraped_jobs_list, config):
-    """Adds scraped job data to Excel, creating/updating file/columns, logging duplicates."""
+    """Adds scraped job data to Excel, returns (success_bool, added_count, skipped_duplicates)."""
     excel_filepath = config['paths']['excel_filepath']
     new_status = config['status']['NEW']
     logging.info(f"Processing {len(scraped_jobs_list)} scraped jobs for Excel file: {excel_filepath}")
 
-    new_jobs_df = None # Initialize as None
+    added_count = 0
+    skipped_duplicates = 0
+    new_jobs_df = None
+
     if scraped_jobs_list:
         try:
             new_jobs_df = pd.DataFrame(scraped_jobs_list)
-            if new_jobs_df.empty:
-                logging.info("DataFrame created from scraped jobs is empty.")
+            if new_jobs_df.empty: logging.info("DataFrame from scraped jobs is empty.")
             else:
-                logging.info(f"Created DataFrame with {len(new_jobs_df)} new jobs from this session.")
+                logging.info(f"Created DataFrame with {len(new_jobs_df)} new jobs from this batch.")
                 new_jobs_df['Date Added'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 new_jobs_df['Status'] = new_status
-
-                logging.debug("Ensuring all expected columns exist in the new data...")
+                # Ensure all expected columns exist (using the updated list implicitly)
                 for col in ALL_EXPECTED_COLUMNS:
-                    if col not in new_jobs_df.columns:
-                        logging.debug(f" Adding missing column '{col}' to new DataFrame.")
-                        if col in ['Notes', 'Job Description HTML', 'Job Description Plain Text', 'About Company', 'Skills Required', 'Applied Date', 'Extracted Responsibilities', 'Extracted Required Skills', 'Extracted Preferred Skills', 'Extracted Experience Level', 'Extracted Key Qualifications', 'Extracted Company Description', 'AI Score Justification', 'AI Strengths', 'AI Areas for Improvement', 'AI Actionable Recommendations', 'Generated Tailored Summary', 'Generated Tailored Bullets', 'Generated Tailored Skills List', 'Tailored HTML Path', 'Tailored PDF Path', 'Source', 'Title', 'Company', 'Location', 'Workplace Type', 'Link', 'Posted Ago Text', 'Salary Range', 'Insights', 'Company Logo URL', 'Status', 'Applicant Count', 'Posted Ago Text Detailed', 'Company LinkedIn URL', 'Company Industry', 'Company Size', 'Company LinkedIn Members', 'Company Followers', 'Hiring Team Member 1 Name', 'Hiring Team Member 1 Profile URL', 'Hiring Team Member 2 Name', 'Hiring Team Member 2 Profile URL']:
-                             new_jobs_df[col] = ''
-                        elif col in ['Job ID', 'Posted Days Ago', 'Posted Hours Ago', 'AI Match Score']:
-                             new_jobs_df[col] = pd.NA
-                        elif col in ['Easy Apply', 'Promoted', 'Viewed', 'Early Applicant', 'Verified']:
-                              new_jobs_df[col] = False
-                        else:
-                             new_jobs_df[col] = pd.NA
-
-                # Create unique key only if there's data and key columns exist
+                    if col not in new_jobs_df.columns: new_jobs_df[col] = pd.NA # Initialize missing as NA/None
+                # Create unique key
                 if all(k in new_jobs_df.columns for k in ['Link', 'Title', 'Company']):
-                     new_jobs_df['unique_key'] = (
-                         new_jobs_df['Link'].astype(str).str.lower() + '|' +
-                         new_jobs_df['Title'].astype(str).str.lower() + '|' +
-                         new_jobs_df['Company'].astype(str).str.lower()
-                     )
-                else:
-                     logging.error("Could not create unique key for new jobs - missing Link, Title, or Company column.")
-                     new_jobs_df['unique_key'] = None # Handle gracefully
-
-        except Exception as df_err:
-             logging.error(f"Error processing DataFrame from scraped jobs: {df_err}", exc_info=True)
-             return False
-    else:
-         logging.info("No new jobs scraped in this session.")
+                     new_jobs_df['unique_key'] = (new_jobs_df['Link'].astype(str).str.lower() + '|' +
+                                                  new_jobs_df['Title'].astype(str).str.lower() + '|' +
+                                                  new_jobs_df['Company'].astype(str).str.lower())
+                else: logging.error("Missing key columns for deduplication."); new_jobs_df['unique_key'] = None
+        except Exception as df_err: logging.error(f"Error processing DataFrame from scraped jobs: {df_err}", exc_info=True); return False, 0, 0
+    else: logging.info("No new jobs scraped in this batch to add.")
 
     # --- Read Existing Data and Merge ---
     file_exists = os.path.exists(excel_filepath)
     df_to_save = None
     save_needed = False
-    added_count = 0
-    skipped_duplicates = 0
 
     try:
         existing_df = pd.DataFrame(columns=ALL_EXPECTED_COLUMNS)
         existing_keys = set()
-
         if file_exists:
             logging.info(f"Reading existing Excel file: {excel_filepath}")
             try:
-                existing_df = pd.read_excel(excel_filepath, engine='openpyxl', dtype=object).fillna('') # Fillna on read
+                existing_df = pd.read_excel(excel_filepath, engine='openpyxl', dtype=object).fillna('')
                 logging.info(f"Read {len(existing_df)} existing records.")
                 # --- Schema Check & Update for EXISTING DataFrame ---
                 added_missing_cols_existing = False
                 for col in ALL_EXPECTED_COLUMNS:
                     if col not in existing_df.columns:
                         logging.warning(f"Adding missing column '{col}' to existing DataFrame.")
-                        existing_df[col] = '' # Initialize new cols as empty string
+                        existing_df[col] = ''
                         added_missing_cols_existing = True
-
                 if added_missing_cols_existing:
                      logging.info("Reordering columns in existing DataFrame.")
                      existing_df = existing_df.reindex(columns=ALL_EXPECTED_COLUMNS, fill_value='')
                      save_needed = True
-
-                # Ensure key columns exist before creating key
+                # --- Create Existing Keys ---
                 if all(k in existing_df.columns for k in ['Link', 'Title', 'Company']):
-                    existing_df['unique_key'] = (
-                        existing_df['Link'].astype(str).str.lower() + '|' +
-                        existing_df['Title'].astype(str).str.lower() + '|' +
-                        existing_df['Company'].astype(str).str.lower()
-                    )
+                    existing_df['unique_key'] = (existing_df['Link'].astype(str).str.lower() + '|' +
+                                                 existing_df['Title'].astype(str).str.lower() + '|' +
+                                                 existing_df['Company'].astype(str).str.lower())
                     existing_keys = set(existing_df['unique_key'])
-                    existing_df = existing_df.drop(columns=['unique_key']) # Drop temp key
-                else:
-                    logging.warning("Could not create unique keys for existing data - missing key columns. Deduplication might be incorrect.")
-                    existing_keys = set() # Cannot deduplicate reliably
+                    existing_df = existing_df.drop(columns=['unique_key'])
+                else: logging.warning("Missing key columns in existing data. Deduplication skipped.")
+            except zipfile.BadZipFile:
+                logging.warning(f"Existing Excel file '{excel_filepath.name}' is corrupt or invalid. Treating as empty and overwriting.")
+                existing_df = pd.DataFrame(columns=ALL_EXPECTED_COLUMNS) # Start fresh
+                existing_keys = set()
+                save_needed = True # Force save to create a valid file structure
+            except Exception as read_err: logging.error(f"Error reading/processing existing Excel: {read_err}", exc_info=True); return False, added_count, skipped_duplicates
 
-            except Exception as read_err:
-                 logging.error(f"Error reading/processing existing Excel: {read_err}", exc_info=True)
-                 existing_df = pd.DataFrame(columns=ALL_EXPECTED_COLUMNS)
-                 existing_keys = set()
-
-        # --- Process New Jobs (Deduplication and Logging) ---
-        unique_new_jobs_list_of_dicts = [] # Use a list of dicts for cleaner appending
+        # --- Process New Jobs (Deduplication) ---
+        unique_new_jobs_list = []
         if new_jobs_df is not None and not new_jobs_df.empty and 'unique_key' in new_jobs_df.columns:
             logging.info("Checking scraped jobs against existing data...")
-            for index, row_series in new_jobs_df.iterrows():
-                key = row_series['unique_key']
-                if key in existing_keys:
+            for index, row in new_jobs_df.iterrows():
+                key = row['unique_key']
+                if key is None or key in existing_keys:
                     skipped_duplicates += 1
-                    logging.info(f"  Skipped Duplicate: '{row_series.get('Title', 'N/A')}' @ '{row_series.get('Company', 'N/A')}'")
+                    # MODIFIED (Proposal #4): Removed individual duplicate log
+                    # logging.info(f"  Skipped Duplicate: '{row.get('Title', 'N/A')}' @ '{row.get('Company', 'N/A')}'")
                 else:
-                    # Convert the row Series (without unique_key) to dict and add to list
-                    row_dict = row_series.drop('unique_key').to_dict()
-                    unique_new_jobs_list_of_dicts.append(row_dict)
-                    existing_keys.add(key) # Add to set to prevent duplicates within new batch
-
-            added_count = len(unique_new_jobs_list_of_dicts)
-            logging.info(f"Found {added_count} new unique jobs to add (skipped {skipped_duplicates} duplicates).")
-
+                    unique_new_jobs_list.append(row.drop('unique_key').to_dict())
+                    existing_keys.add(key)
+            added_count = len(unique_new_jobs_list)
+            logging.info(f"Deduplication complete: {added_count} new unique jobs to add, {skipped_duplicates} duplicates skipped.")
             if added_count > 0:
-                # Create DataFrame from the list of unique job dictionaries
-                new_unique_df = pd.DataFrame(unique_new_jobs_list_of_dicts)
-                # Ensure columns match ALL_EXPECTED_COLUMNS before concat
-                new_unique_df = new_unique_df.reindex(columns=ALL_EXPECTED_COLUMNS, fill_value='')
-                # Combine with existing data
-                combined_df = pd.concat([existing_df, new_unique_df], ignore_index=True)
-                df_to_save = combined_df
+                new_unique_df = pd.DataFrame(unique_new_jobs_list).reindex(columns=ALL_EXPECTED_COLUMNS, fill_value='')
+                df_to_save = pd.concat([existing_df, new_unique_df], ignore_index=True)
                 save_needed = True
-            else:
-                df_to_save = existing_df # Use existing (might have schema changes)
-        else:
-            df_to_save = existing_df # No new jobs, use existing
+            else: df_to_save = existing_df
+        else: df_to_save = existing_df
 
-        # --- Create File if Doesn't Exist and No Data ---
-        if not file_exists and not scraped_jobs_list: # Check original list, not DataFrame
-             logging.info(f"Excel file not found. Creating new file with headers: {excel_filepath}")
+        # --- Create File if Doesn't Exist ---
+        if not file_exists and not scraped_jobs_list:
+             logging.info(f"Creating new Excel file with headers: {excel_filepath}")
              df_to_save = pd.DataFrame(columns=ALL_EXPECTED_COLUMNS)
              save_needed = True
 
         # --- Save to Excel ---
         if save_needed and df_to_save is not None:
             logging.info(f"Attempting to save DataFrame ({len(df_to_save)} rows) to Excel...")
-            df_to_save = df_to_save.reindex(columns=ALL_EXPECTED_COLUMNS, fill_value='') # Final order check
+            df_to_save = df_to_save.reindex(columns=ALL_EXPECTED_COLUMNS, fill_value='') # Final order/fill
+            # Convert potential pandas NA to empty strings for Excel compatibility if preferred
+            df_to_save = df_to_save.fillna('')
             df_to_save.to_excel(excel_filepath, index=False, engine='openpyxl')
             logging.info(f"Successfully saved Excel file: {excel_filepath}")
-        elif df_to_save is None and not file_exists:
-             logging.error("Logic error: DataFrame to save is None when creating new file.")
-             return False
-        else:
-            logging.info("No changes needed for the Excel file in this run.")
+        else: logging.info("No changes needed for the Excel file in this batch.")
 
-        return True
+        # MODIFIED (Proposal #5): Return counts
+        return True, added_count, skipped_duplicates
 
-    except PermissionError: logging.error(f"PERM ERROR writing to Excel: {excel_filepath}."); return False
-    except Exception as e: logging.error(f"Unexpected error during Excel processing: {e}", exc_info=True); return False
-# **** END REPLACEMENT for add_jobs_to_excel function in phase1_list_scraper.py ****
-# --- Main Function for Phase 1 ---
+    except PermissionError: logging.error(f"PERM ERROR writing to Excel: {excel_filepath}."); return False, added_count, skipped_duplicates
+    except Exception as e: logging.error(f"Unexpected error during Excel processing: {e}", exc_info=True); return False, added_count, skipped_duplicates
+
+# MODIFIED (Proposal #5): Capture and log summary counts
 def run_phase1_job_list_scraping(config):
-    """
-    Executes the Phase 1 workflow: connect to Selenium, scrape job list, add to Excel.
-
-    Args:
-        config (dict): The master configuration dictionary.
-
-    Returns:
-        bool: True if the phase completed successfully (even if no jobs found),
-              False if a critical error occurred (e.g., WebDriver connection failed, Excel write failed).
-    """
+    """Executes Phase 1, connects Selenium, scrapes, adds to Excel, returns summary."""
     logging.info("Initiating Phase 1: Job List Scraping")
     driver = None
-    overall_success = False # Assume failure until success steps complete
+    overall_success = False
+    total_added_session = 0
+    total_skipped_session = 0
 
     try:
-        # --- 1. Setup Selenium ---
         driver = setup_selenium_driver(config)
         if not driver:
-            # Error already logged in setup_selenium_driver
             logging.critical("Failed to setup Selenium WebDriver. Phase 1 cannot proceed.")
-            return False # Critical failure
+            return False, 0, 0 # Return False and zero counts
 
-        # --- 2. Search and Scrape ---
-        # search_and_scrape_jobs handles its own logging and non-critical errors
-        scraped_jobs = search_and_scrape_jobs(driver, config)
+        # MODIFIED: Capture returned counts
+        scraped_jobs, total_added_session, total_skipped_session = search_and_scrape_jobs(driver, config)
 
-        # --- 3. Add to Excel ---
-        if scraped_jobs:
-            logging.info(f"Adding {len(scraped_jobs)} scraped jobs to Excel...")
-            excel_success = add_jobs_to_excel(scraped_jobs, config)
-            if not excel_success:
-                logging.error("Failed to add jobs to Excel. Data may be lost.")
-                # Decide if this is critical - returning False stops the whole workflow
-                return False # Treat Excel write failure as critical
-            else:
-                overall_success = True # Scraping and writing successful
-        else:
-            logging.info("No jobs were scraped in this session. Checking/Creating Excel file structure.")
-            # Call add_jobs_to_excel with empty list to ensure file/columns exist
-            excel_init_success = add_jobs_to_excel([], config)
-            if not excel_init_success:
-                 logging.error("Failed during Excel initialization/check even with no new jobs.")
-                 return False # Critical if we can't even verify the file
-            else:
-                 overall_success = True # Phase ran successfully, just found no jobs
+        # Excel handling logic moved inside search_and_scrape_jobs for final save if needed
+        # Check if scraping itself was successful (even if no jobs added)
+        # The search function might return counts even if excel write failed intermediately,
+        # so we rely on its return value for overall success.
+        # A critical Excel error within search_and_scrape would likely return ([], 0, 0) or raise.
+        if isinstance(scraped_jobs, list): # Check if scraping function executed without critical error
+            overall_success = True # Mark as successful run, even if 0 jobs added
+            if not scraped_jobs and total_added_session == 0 and total_skipped_session == 0:
+                 logging.info("No jobs were scraped or added in this session.")
+                 # Ensure excel file exists with headers if no jobs found
+                 logging.info("Ensuring Excel file structure exists...")
+                 excel_init_success, _, _ = add_jobs_to_excel([], config)
+                 if not excel_init_success:
+                     logging.error("Failed during Excel initialization check even with no new jobs.")
+                     overall_success = False # Critical if we can't create/verify the file
+
+        else: # Should not happen if search_and_scrape returns correctly
+            logging.error("Scraping function did not return expected list.")
+            overall_success = False
 
     except WebDriverException as e:
-         # Catch WebDriver errors that might occur outside the scraping loop itself
-         logging.critical(f"WebDriverException during Phase 1 execution: {e}")
-         logging.critical(traceback.format_exc())
+         logging.critical(f"WebDriverException during Phase 1 execution: {e}", exc_info=True)
          overall_success = False
     except Exception as e:
-        logging.critical(f"An unexpected critical error occurred in Phase 1: {e}")
-        logging.critical(traceback.format_exc())
+        logging.critical(f"An unexpected critical error occurred in Phase 1: {e}", exc_info=True)
         overall_success = False
-    # 'finally' block is not strictly needed here as the driver connection is managed
-    # by the calling script (or should persist if connected to an existing browser).
-    # We don't want to `driver.quit()` if connected via debugger port.
 
+    # MODIFIED (Proposal #5): Add summary log before final completion message
     if overall_success:
+         logging.info(f"Phase 1 Summary: Added {total_added_session} unique jobs to Excel. Skipped {total_skipped_session} duplicates found during processing.")
          logging.info("Phase 1 completed successfully.")
     else:
          logging.error("Phase 1 finished with errors.")
 
-    return overall_success
-
-# Note: The `if __name__ == "__main__":` block is removed as this script
-# is now intended to be imported and run via `main_workflow.py`.
+    # MODIFIED (Proposal #5): Return success status and counts
+    return overall_success, total_added_session, total_skipped_session
