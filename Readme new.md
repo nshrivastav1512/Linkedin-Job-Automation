@@ -398,18 +398,18 @@ graph TD
     classDef final_nok fill:#fcc,stroke:#a77,stroke-width:1px,color:#300;
 
     %% Start & Phase 1
-    Start([Start: New Job Found]) --> P1_New[Status: New];
+    Start([Start: New Job Found]) --> P1_New(Status: New);
     P1_New --> P1_Run{Phase 1: Run};
-    P1_Run -- Failed --> P1_Err_List[Status: Error - Scrape Job List];
+    P1_Run -- Failed --> P1_Err_List(Status: Error - Scrape Job List);
 
     %% Phase 2
     P1_New -- Success --> P2_Run{Phase 2: Scrape Details};
-    P2_Run --> P2_Proc[Status: Processing Details];
-    P2_Proc -- Success --> P2_Ready[Status: Ready for AI];
-    P2_Proc -- Invalid Link --> P2_Err_Link[Status: Error - Invalid Job Link];
-    P2_Proc -- Scraping Failed --> P2_Err_Detail[Status: Error - Scrape Job Details];
-    P2_Proc -- WebDriver Error --> P2_Err_WD[Status: Error - WebDriver Connection];
-    P2_Proc -- Missing Critical Data --> P2_Err_Data[Status: Error - Missing Input Data];
+    P2_Run --> P2_Proc(Status: Processing Details);
+    P2_Proc -- Success --> P2_Ready(Status: Ready for AI);
+    P2_Proc -- Invalid Link --> P2_Err_Link(Status: Error - Invalid Job Link);
+    P2_Proc -- Scraping Failed --> P2_Err_Detail(Status: Error - Scrape Job Details);
+    P2_Proc -- WebDriver Error --> P2_Err_WD(Status: Error - WebDriver Connection);
+    P2_Proc -- Missing Critical Data --> P2_Err_Data(Status: Error - Missing Input Data);
     P1_Err_List --> P2_Skip((Skip Phase 2));
     P2_Err_Link --> Stop_P2_Fail((Stop for Job));
     P2_Err_Detail --> Stop_P2_Fail;
@@ -418,11 +418,11 @@ graph TD
 
     %% Phase 3
     P2_Ready --> P3_Run{Phase 3: AI Analysis};
-    P3_Run --> P3_Proc[Status: Processing AI Analysis];
-    P3_Proc -- Success --> P3_Analyzed[Status: AI Analyzed];
-    P3_Proc -- Extraction Failed --> P3_Err_Extract[Status: Error - AI Extraction];
-    P3_Proc -- Analysis Failed --> P3_Err_Analysis[Status: Error - AI Analysis];
-    P3_Proc -- API Config/Auth Error --> P3_Err_API[Status: Error - API Config/Auth];
+    P3_Run --> P3_Proc(Status: Processing AI Analysis);
+    P3_Proc -- Success --> P3_Analyzed(Status: AI Analyzed);
+    P3_Proc -- Extraction Failed --> P3_Err_Extract(Status: Error - AI Extraction);
+    P3_Proc -- Analysis Failed --> P3_Err_Analysis(Status: Error - AI Analysis);
+    P3_Proc -- API Config/Auth Error --> P3_Err_API(Status: Error - API Config/Auth);
     P3_Err_Extract --> Stop_P3_Fail((Stop for Job));
     P3_Err_Analysis --> Stop_P3_Fail;
     P3_Err_API --> Stop_P3_Fail;
@@ -431,16 +431,16 @@ graph TD
 
     %% Phase 4
     P3_Analyzed --> P4_CheckScore{Phase 4: Check Score};
-    P4_CheckScore -- Score < Threshold --> P4_Skip_Low[Status: Skipped - Low AI Score];
+    P4_CheckScore -- Score < Threshold --> P4_Skip_Low(Status: Skipped - Low AI Score);
     P4_CheckScore -- Score >= Threshold --> P4_Run{Phase 4: Tailor Resume};
-    P4_Run --> P4_Tailoring[Status: Tailoring Resume];
-    P4_Tailoring -- Tailoring/PDF OK (1 Page) --> P4_Success[Status: Success];
-    P4_Tailoring -- Tailoring/PDF OK (>1 Page) --> P4_NeedsEdit[Status: Tailored Needs Manual Edit];
-    P4_Tailoring -- Tailoring Failed --> P4_Err_Tailor[Status: Error - AI Tailoring];
-    P4_Tailoring -- HTML Edit Failed --> P4_Err_HTML[Status: Error - HTML Edit];
-    P4_Tailoring -- PDF Gen Failed --> P4_Err_PDF[Status: Error - PDF Generation];
-    P4_Tailoring -- File Access Error --> P4_Err_File[Status: Error - File Access];
-    P4_Tailoring -- Max Re-Tailoring Attempts Hit --> P4_Err_MaxRetry[Status: Error - Max Re-Tailoring Attempts];
+    P4_Run --> P4_Tailoring(Status: Tailoring Resume);
+    P4_Tailoring -- Tailoring/PDF OK (1 Page) --> P4_Success(Status: Success);
+    P4_Tailoring -- Tailoring/PDF OK (>1 Page) --> P4_NeedsEdit(Status: Tailored Needs Manual Edit);
+    P4_Tailoring -- Tailoring Failed --> P4_Err_Tailor(Status: Error - AI Tailoring);
+    P4_Tailoring -- HTML Edit Failed --> P4_Err_HTML(Status: Error - HTML Edit);
+    P4_Tailoring -- PDF Gen Failed --> P4_Err_PDF(Status: Error - PDF Generation);
+    P4_Tailoring -- File Access Error --> P4_Err_File(Status: Error - File Access);
+    P4_Tailoring -- Max Re-Tailoring Attempts Hit --> P4_Err_MaxRetry(Status: Error - Max Re-Tailoring Attempts);
 
     P4_Err_Tailor --> Stop_P4_Fail((Stop for Job));
     P4_Err_HTML --> Stop_P4_Fail;
@@ -454,15 +454,17 @@ graph TD
     %% Phase 5 & Re-Tailoring Loop
     P4_Success --> P5_Run{Phase 5: Rescore};
     P4_NeedsEdit --> P5_Run;
-    P5_Run --> P5_Rescoring[Status: Rescoring Tailored Resume];
-    P5_Rescoring -- Success: Score Improved --> P5_Improved[Status: Rescored - Improved];
-    P5_Rescoring -- Success: Score Maintained (>= Threshold) --> P5_Maintained[Status: Rescored - Maintained];
-    P5_Rescoring -- Success: Score Declined (but >= Threshold) --> P5_Maintained;  %% <<< Removed comment from this line
-    P5_Rescoring -- Success: Score Now < Threshold --> P5_NeedsRetailor[Status: Needs Re-Tailoring];
-    P5_Rescoring -- Rescoring Failed --> P5_Err_Rescore[Status: Error - Rescoring Failed];
-    P5_Rescoring -- Missing Tailored HTML --> P5_Err_HTML[Status: Error - Missing Tailored HTML];
-    P5_Rescoring -- Score Comparison Failed --> P5_Err_Compare[Status: Error - Score Comparison Failed];
+    P5_Run --> P5_Rescoring(Status: Rescoring Tailored Resume);
+    %% --- Simplified P5 Success Paths ---
+    P5_Rescoring -- Score Improved --> P5_Improved(Status: Rescored - Improved);
+    P5_Rescoring -- Score Maintained or Declined (but >= Threshold) --> P5_Maintained(Status: Rescored - Maintained);
+    P5_Rescoring -- Score < Threshold --> P5_NeedsRetailor(Status: Needs Re-Tailoring);
+    %% --- P5 Error Paths ---
+    P5_Rescoring -- Rescoring Failed --> P5_Err_Rescore(Status: Error - Rescoring Failed);
+    P5_Rescoring -- Missing Tailored HTML --> P5_Err_HTML(Status: Error - Missing Tailored HTML);
+    P5_Rescoring -- Score Comparison Failed --> P5_Err_Compare(Status: Error - Score Comparison Failed);
 
+    %% --- End States & Loop ---
     P5_Improved --> Stop_P5_OK((Workflow End for Job));
     P5_Maintained --> Stop_P5_OK;
     P5_Err_Rescore --> Stop_P5_Fail((Stop for Job));
@@ -471,6 +473,7 @@ graph TD
 
     P5_NeedsRetailor --> P4_Run; %% Loop back to Phase 4 Tailoring
 
+    %% --- Skip Paths ---
     P4_Skip --> P5_Skip((Skip Phase 5));
     Stop_P4_Fail --> P5_Skip;
     Stop_P4_OK --> P5_Skip;
