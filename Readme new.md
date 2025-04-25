@@ -391,7 +391,89 @@ This flowchart illustrates the possible transitions for the `Status` column in t
 
 ```mermaid
 graph TD
-    %% Styles
+    %% Phase 1: Start and Initial Scrape
+    Start([Start: New Job Found]) --> N(New);
+    N --> R1{Run Phase 1};
+    R1 -- Success --> N; %% Stays 'New' until P2 runs
+    R1 -- Failed --> E1_List(Error - Scrape Job List);
+
+    %% Phase 2: Detail Scraping
+    N --> R2{Run Phase 2};
+    E1_List -.-> Skip_P2((Skip P2)); %% Skip if P1 failed
+    R2 --> P2_Proc(Processing Details);
+    P2_Proc -- Success --> P2_Ready(Ready for AI);
+    P2_Proc -- Invalid Link --> E2_Link(Error - Invalid Job Link);
+    P2_Proc -- Scraping Failed --> E2_Detail(Error - Scrape Job Details);
+    P2_Proc -- WebDriver Error --> E2_WD(Error - WebDriver Connection);
+    P2_Proc -- Missing Data --> E2_Data(Error - Missing Input Data);
+    E2_Link --> Stop_Job((Stop for Job));
+    E2_Detail --> Stop_Job;
+    E2_WD --> Stop_Job;
+    E2_Data --> Stop_Job;
+
+    %% Phase 3: AI Analysis
+    P2_Ready --> R3{Run Phase 3};
+    Skip_P2 -.-> Skip_P3((Skip P3));
+    Stop_Job -.-> Skip_P3;
+    R3 --> P3_Proc(Processing AI Analysis);
+    P3_Proc -- Success --> P3_Analyzed(AI Analyzed);
+    P3_Proc -- Extraction Failed --> E3_Extract(Error - AI Extraction);
+    P3_Proc -- Analysis Failed --> E3_Analysis(Error - AI Analysis);
+    P3_Proc -- API/Auth Error --> E3_API(Error - API Config/Auth);
+    E3_Extract --> Stop_Job3((Stop for Job));
+    E3_Analysis --> Stop_Job3;
+    E3_API --> Stop_Job3;
+
+    %% Phase 4: Tailoring
+    P3_Analyzed --> C4_Score{Check Score?};
+    Skip_P3 -.-> Skip_P4((Skip P4));
+    Stop_Job3 -.-> Skip_P4;
+    C4_Score -- Score < Threshold --> S4_Low(Skipped - Low AI Score);
+    C4_Score -- Score >= Threshold --> C4_Retry{Check Retries?}; %% Check if needs retailoring and attempts
+    S4_Low --> Stop_Job4_OK((Stop for Job));
+
+    %% Phase 4: Re-Tailoring Check (Combined with Score Check logic before Run P4)
+    P5_NeedsRetailor --> C4_Retry; %% From Phase 5 Loopback
+
+    C4_Retry -- Retries < Max --> R4{Run Phase 4};
+    C4_Retry -- Retries >= Max --> E4_MaxRetry(Error - Max Re-Tailoring Attempts);
+    E4_MaxRetry --> Stop_Job4_Fail((Stop for Job));
+
+    %% Phase 4: Actual Tailoring Execution
+    R4 --> P4_Tailoring(Tailoring Resume);
+    P4_Tailoring -- OK, 1 page --> P4_Success(Success);
+    P4_Tailoring -- OK, >1 page --> P4_NeedsEdit(Needs Edit);
+    P4_Tailoring -- Tailoring Failed --> E4_Tailor(Error - AI Tailoring);
+    P4_Tailoring -- HTML Edit Failed --> E4_HTML(Error - HTML Edit);
+    P4_Tailoring -- PDF Gen Failed --> E4_PDF(Error - PDF Generation);
+    P4_Tailoring -- File Access Error --> E4_File(Error - File Access);
+    E4_Tailor --> Stop_Job4_Fail;
+    E4_HTML --> Stop_Job4_Fail;
+    E4_PDF --> Stop_Job4_Fail;
+    E4_File --> Stop_Job4_Fail;
+
+    %% Phase 5: Rescoring
+    P4_Success --> R5{Run Phase 5};
+    P4_NeedsEdit --> R5;
+    Skip_P4 -.-> Skip_P5((Skip P5));
+    Stop_Job4_Fail -.-> Skip_P5;
+    Stop_Job4_OK -.-> Skip_P5;
+    R5 --> P5_Rescoring(Rescoring);
+    P5_Rescoring -- Score Improved --> P5_Improved(Rescored - Improved);
+    P5_Rescoring -- Score Maintained --> P5_Maintained(Rescored - Maintained);
+    P5_Rescoring -- Score < Threshold --> P5_NeedsRetailor(Needs Re-Tailoring); %% Loop Trigger
+    P5_Rescoring -- Rescoring Failed --> E5_Rescore(Error - Rescoring Failed);
+    P5_Rescoring -- Missing HTML --> E5_HTML(Error - Missing Tailored HTML);
+    P5_Rescoring -- Compare Error --> E5_Compare(Error - Score Comparison Failed);
+
+    %% Final States
+    P5_Improved --> End_OK((Workflow End OK));
+    P5_Maintained --> End_OK;
+    E5_Rescore --> End_Fail((Workflow End Fail));
+    E5_HTML --> End_Fail;
+    E5_Compare --> End_Fail;
+
+    %% Styling Nodes (Optional, can be removed if causing issues)
     classDef phase fill:#cde,stroke:#bbb,stroke-width:1px,color:#333;
     classDef success fill:#dfd,stroke:#8b8,stroke-width:1px,color:#040;
     classDef error fill:#fdd,stroke:#b88,stroke-width:1px,color:#400;
@@ -401,94 +483,12 @@ graph TD
     classDef final_warn fill:#ffd,stroke:#cc7,stroke-width:1px,color:#330;
     classDef final_nok fill:#fcc,stroke:#a77,stroke-width:1px,color:#300;
 
-    %% Start & Phase 1
-    Start([Start: New Job Found]) --> P1_New(Status: New);
-    P1_New --> P1_Run{Phase 1: Run};
-    P1_Run -- Failed --> P1_Err_List(Status: Error - Scrape Job List);
-
-    %% Phase 2
-    P1_New -- Success --> P2_Run{Phase 2: Scrape Details};
-    P2_Run --> P2_Proc(Status: Processing Details);
-    P2_Proc -- Success --> P2_Ready(Status: Ready for AI);
-    P2_Proc -- Invalid Link --> P2_Err_Link(Status: Error - Invalid Job Link);
-    P2_Proc -- Scraping Failed --> P2_Err_Detail(Status: Error - Scrape Job Details);
-    P2_Proc -- WebDriver Error --> P2_Err_WD(Status: Error - WebDriver Connection);
-    P2_Proc -- Missing Critical Data --> P2_Err_Data(Status: Error - Missing Input Data);
-    P1_Err_List --> P2_Skip((Skip Phase 2));
-    P2_Err_Link --> Stop_P2_Fail((Stop for Job));
-    P2_Err_Detail --> Stop_P2_Fail;
-    P2_Err_WD --> Stop_P2_Fail;
-    P2_Err_Data --> Stop_P2_Fail;
-
-    %% Phase 3
-    P2_Ready --> P3_Run{Phase 3: AI Analysis};
-    P3_Run --> P3_Proc(Status: Processing AI Analysis);
-    P3_Proc -- Success --> P3_Analyzed(Status: AI Analyzed);
-    P3_Proc -- Extraction Failed --> P3_Err_Extract(Status: Error - AI Extraction);
-    P3_Proc -- Analysis Failed --> P3_Err_Analysis(Status: Error - AI Analysis);
-    P3_Proc -- API Config/Auth Error --> P3_Err_API(Status: Error - API Config/Auth);
-    P3_Err_Extract --> Stop_P3_Fail((Stop for Job));
-    P3_Err_Analysis --> Stop_P3_Fail;
-    P3_Err_API --> Stop_P3_Fail;
-    P2_Skip --> P3_Skip((Skip Phase 3));
-    Stop_P2_Fail --> P3_Skip;
-
-    %% Phase 4
-    P3_Analyzed --> P4_CheckScore{Phase 4: Check Score};
-    P4_CheckScore -- Score < Threshold --> P4_Skip_Low(Status: Skipped - Low AI Score);
-    P4_CheckScore -- Score >= Threshold --> P4_Run{Phase 4: Tailor Resume};
-    P4_Run --> P4_Tailoring(Status: Tailoring Resume);
-    P4_Tailoring -- Tailoring/PDF OK (1 Page) --> P4_Success(Status: Success);
-    P4_Tailoring -- Tailoring/PDF OK (>1 Page) --> P4_NeedsEdit(Status: Tailored Needs Manual Edit);
-    P4_Tailoring -- Tailoring Failed --> P4_Err_Tailor(Status: Error - AI Tailoring);
-    P4_Tailoring -- HTML Edit Failed --> P4_Err_HTML(Status: Error - HTML Edit);
-    P4_Tailoring -- PDF Gen Failed --> P4_Err_PDF(Status: Error - PDF Generation);
-    P4_Tailoring -- File Access Error --> P4_Err_File(Status: Error - File Access);
-    P4_Tailoring -- Max Re-Tailoring Attempts Hit --> P4_Err_MaxRetry(Status: Error - Max Re-Tailoring Attempts);
-
-    P4_Err_Tailor --> Stop_P4_Fail((Stop for Job));
-    P4_Err_HTML --> Stop_P4_Fail;
-    P4_Err_PDF --> Stop_P4_Fail;
-    P4_Err_File --> Stop_P4_Fail;
-    P4_Err_MaxRetry --> Stop_P4_Fail;
-    P4_Skip_Low --> Stop_P4_OK((Stop for Job));
-    P3_Skip --> P4_Skip((Skip Phase 4));
-    Stop_P3_Fail --> P4_Skip;
-
-    %% Phase 5 & Re-Tailoring Loop
-    P4_Success --> P5_Run{Phase 5: Rescore};
-    P4_NeedsEdit --> P5_Run;
-    P5_Run --> P5_Rescoring(Status: Rescoring Tailored Resume);
-    %% --- Simplified P5 Success Paths ---
-    P5_Rescoring -- Score Improved --> P5_Improved(Status: Rescored - Improved);
-    P5_Rescoring -- Score Maintained or Declined (but >= Threshold) --> P5_Maintained(Status: Rescored - Maintained);
-    P5_Rescoring -- Score < Threshold --> P5_NeedsRetailor(Status: Needs Re-Tailoring);
-    %% --- P5 Error Paths ---
-    P5_Rescoring -- Rescoring Failed --> P5_Err_Rescore(Status: Error - Rescoring Failed);
-    P5_Rescoring -- Missing Tailored HTML --> P5_Err_HTML(Status: Error - Missing Tailored HTML);
-    P5_Rescoring -- Score Comparison Failed --> P5_Err_Compare(Status: Error - Score Comparison Failed);
-
-    %% --- End States & Loop ---
-    P5_Improved --> Stop_P5_OK((Workflow End for Job));
-    P5_Maintained --> Stop_P5_OK;
-    P5_Err_Rescore --> Stop_P5_Fail((Stop for Job));
-    P5_Err_HTML --> Stop_P5_Fail;
-    P5_Err_Compare --> Stop_P5_Fail;
-
-    P5_NeedsRetailor --> P4_Run; %% Loop back to Phase 4 Tailoring
-
-    %% --- Skip Paths ---
-    P4_Skip --> P5_Skip((Skip Phase 5));
-    Stop_P4_Fail --> P5_Skip;
-    Stop_P4_OK --> P5_Skip;
-
-    %% Class Definitions
-    class P1_New,P2_Proc,P2_Ready,P3_Proc,P3_Analyzed,P4_Tailoring,P5_Rescoring intermediate;
+    class R1,R2,R3,C4_Score,C4_Retry,R4,R5 phase;
+    class N,P2_Proc,P2_Ready,P3_Proc,P3_Analyzed,P4_Tailoring,P5_Rescoring intermediate;
     class P4_Success,P5_Improved,P5_Maintained final_ok;
     class P4_NeedsEdit final_warn;
-    class P1_Err_List,P2_Err_Link,P2_Err_Detail,P2_Err_WD,P2_Err_Data,P3_Err_Extract,P3_Err_Analysis,P3_Err_API,P4_Err_Tailor,P4_Err_HTML,P4_Err_PDF,P4_Err_File,P4_Skip_Low,P4_Err_MaxRetry,P5_Err_Rescore,P5_Err_HTML,P5_Err_Compare,P5_NeedsRetailor final_nok;
-    class P1_Run,P2_Run,P3_Run,P4_CheckScore,P4_Run,P5_Run phase;
-    class Start,Stop_P2_Fail,Stop_P3_Fail,Stop_P4_Fail,Stop_P4_OK,Stop_P5_Fail,Stop_P5_OK,P2_Skip,P3_Skip,P4_Skip,P5_Skip condition;
+    class E1_List,E2_Link,E2_Detail,E2_WD,E2_Data,E3_Extract,E3_Analysis,E3_API,S4_Low,E4_MaxRetry,E4_Tailor,E4_HTML,E4_PDF,E4_File,P5_NeedsRetailor,E5_Rescore,E5_HTML,E5_Compare final_nok;
+    class Start,Stop_Job,Stop_Job3,Stop_Job4_OK,Stop_Job4_Fail,End_OK,End_Fail,Skip_P2,Skip_P3,Skip_P4,Skip_P5 condition;
 ```
 
 ## Error Handling & Troubleshooting ⚠️
