@@ -386,6 +386,8 @@ This flowchart illustrates the possible transitions for the `Status` column in t
 *(Note: Requires a Markdown viewer that supports Mermaid diagrams to render correctly.)*
 
 ```mermaid
+info
+
 graph TD
     %% Styles
     classDef phase fill:#cde,stroke:#bbb,stroke-width:1px,color:#333;
