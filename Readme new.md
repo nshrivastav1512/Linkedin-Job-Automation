@@ -391,15 +391,13 @@ This flowchart illustrates the possible transitions for the `Status` column in t
 
 ```mermaid
 graph TD
-    %% Phase 1: Start and Initial Scrape
     Start([Start: New Job Found]) --> N(New);
     N --> R1{Run Phase 1};
-    R1 -- Success --> N; %% Stays 'New' until P2 runs
+    R1 -- Success --> N;
     R1 -- Failed --> E1_List(Error - Scrape Job List);
 
-    %% Phase 2: Detail Scraping
     N --> R2{Run Phase 2};
-    E1_List -.-> Skip_P2((Skip P2)); %% Skip if P1 failed
+    E1_List -.-> Skip_P2((Skip P2));
     R2 --> P2_Proc(Processing Details);
     P2_Proc -- Success --> P2_Ready(Ready for AI);
     P2_Proc -- Invalid Link --> E2_Link(Error - Invalid Job Link);
@@ -411,7 +409,6 @@ graph TD
     E2_WD --> Stop_Job;
     E2_Data --> Stop_Job;
 
-    %% Phase 3: AI Analysis
     P2_Ready --> R3{Run Phase 3};
     Skip_P2 -.-> Skip_P3((Skip P3));
     Stop_Job -.-> Skip_P3;
@@ -424,22 +421,19 @@ graph TD
     E3_Analysis --> Stop_Job3;
     E3_API --> Stop_Job3;
 
-    %% Phase 4: Tailoring
     P3_Analyzed --> C4_Score{Check Score?};
     Skip_P3 -.-> Skip_P4((Skip P4));
     Stop_Job3 -.-> Skip_P4;
     C4_Score -- Score < Threshold --> S4_Low(Skipped - Low AI Score);
-    C4_Score -- Score >= Threshold --> C4_Retry{Check Retries?}; %% Check if needs retailoring and attempts
+    C4_Score -- Score >= Threshold --> C4_Retry{Check Retries?};
     S4_Low --> Stop_Job4_OK((Stop for Job));
 
-    %% Phase 4: Re-Tailoring Check (Combined with Score Check logic before Run P4)
-    P5_NeedsRetailor --> C4_Retry; %% From Phase 5 Loopback
+    P5_NeedsRetailor --> C4_Retry;
 
     C4_Retry -- Retries < Max --> R4{Run Phase 4};
     C4_Retry -- Retries >= Max --> E4_MaxRetry(Error - Max Re-Tailoring Attempts);
     E4_MaxRetry --> Stop_Job4_Fail((Stop for Job));
 
-    %% Phase 4: Actual Tailoring Execution
     R4 --> P4_Tailoring(Tailoring Resume);
     P4_Tailoring -- OK, 1 page --> P4_Success(Success);
     P4_Tailoring -- OK, >1 page --> P4_NeedsEdit(Needs Edit);
@@ -452,7 +446,6 @@ graph TD
     E4_PDF --> Stop_Job4_Fail;
     E4_File --> Stop_Job4_Fail;
 
-    %% Phase 5: Rescoring
     P4_Success --> R5{Run Phase 5};
     P4_NeedsEdit --> R5;
     Skip_P4 -.-> Skip_P5((Skip P5));
@@ -461,34 +454,16 @@ graph TD
     R5 --> P5_Rescoring(Rescoring);
     P5_Rescoring -- Score Improved --> P5_Improved(Rescored - Improved);
     P5_Rescoring -- Score Maintained --> P5_Maintained(Rescored - Maintained);
-    P5_Rescoring -- Score < Threshold --> P5_NeedsRetailor(Needs Re-Tailoring); %% Loop Trigger
+    P5_Rescoring -- Score < Threshold --> P5_NeedsRetailor(Needs Re-Tailoring);
     P5_Rescoring -- Rescoring Failed --> E5_Rescore(Error - Rescoring Failed);
     P5_Rescoring -- Missing HTML --> E5_HTML(Error - Missing Tailored HTML);
     P5_Rescoring -- Compare Error --> E5_Compare(Error - Score Comparison Failed);
 
-    %% Final States
     P5_Improved --> End_OK((Workflow End OK));
     P5_Maintained --> End_OK;
     E5_Rescore --> End_Fail((Workflow End Fail));
     E5_HTML --> End_Fail;
     E5_Compare --> End_Fail;
-
-    %% Styling Nodes (Optional, can be removed if causing issues)
-    classDef phase fill:#cde,stroke:#bbb,stroke-width:1px,color:#333;
-    classDef success fill:#dfd,stroke:#8b8,stroke-width:1px,color:#040;
-    classDef error fill:#fdd,stroke:#b88,stroke-width:1px,color:#400;
-    classDef intermediate fill:#eef,stroke:#aac,stroke-width:1px,color:#113;
-    classDef condition fill:#ffe,stroke:#dd8,stroke-width:1px,color:#440;
-    classDef final_ok fill:#cfc,stroke:#7a7,stroke-width:1px,color:#030;
-    classDef final_warn fill:#ffd,stroke:#cc7,stroke-width:1px,color:#330;
-    classDef final_nok fill:#fcc,stroke:#a77,stroke-width:1px,color:#300;
-
-    class R1,R2,R3,C4_Score,C4_Retry,R4,R5 phase;
-    class N,P2_Proc,P2_Ready,P3_Proc,P3_Analyzed,P4_Tailoring,P5_Rescoring intermediate;
-    class P4_Success,P5_Improved,P5_Maintained final_ok;
-    class P4_NeedsEdit final_warn;
-    class E1_List,E2_Link,E2_Detail,E2_WD,E2_Data,E3_Extract,E3_Analysis,E3_API,S4_Low,E4_MaxRetry,E4_Tailor,E4_HTML,E4_PDF,E4_File,P5_NeedsRetailor,E5_Rescore,E5_HTML,E5_Compare final_nok;
-    class Start,Stop_Job,Stop_Job3,Stop_Job4_OK,Stop_Job4_Fail,End_OK,End_Fail,Skip_P2,Skip_P3,Skip_P4,Skip_P5 condition;
 ```
 
 ## Error Handling & Troubleshooting ⚠️
