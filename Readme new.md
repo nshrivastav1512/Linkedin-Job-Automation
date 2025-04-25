@@ -457,7 +457,7 @@ graph TD
     P5_Run --> P5_Rescoring[Status: Rescoring Tailored Resume];
     P5_Rescoring -- Success: Score Improved --> P5_Improved[Status: Rescored - Improved];
     P5_Rescoring -- Success: Score Maintained (>= Threshold) --> P5_Maintained[Status: Rescored - Maintained];
-    P5_Rescoring -- Success: Score Declined (but >= Threshold) --> P5_Maintained;  %% Removed comment, flow remains the same
+    P5_Rescoring -- Success: Score Declined (but >= Threshold) --> P5_Maintained;  %% <<< Removed comment from this line
     P5_Rescoring -- Success: Score Now < Threshold --> P5_NeedsRetailor[Status: Needs Re-Tailoring];
     P5_Rescoring -- Rescoring Failed --> P5_Err_Rescore[Status: Error - Rescoring Failed];
     P5_Rescoring -- Missing Tailored HTML --> P5_Err_HTML[Status: Error - Missing Tailored HTML];
