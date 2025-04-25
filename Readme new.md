@@ -386,84 +386,100 @@ This flowchart illustrates the possible transitions for the `Status` column in t
 *(Note: Requires a Markdown viewer that supports Mermaid diagrams to render correctly.)*
 
 ```mermaid
-  info
-```
-
-```mermaid
 graph TD
-    Start([Start: New Job Found]) --> N(New);
-    N --> R1{Run Phase 1};
-    R1 -- Success --> N;
-    R1 -- Failed --> E1_List(Error - Scrape Job List);
+    %% Start & Phase 1
+    Start([Workflow Start]) --> P1_Scrape{Run Phase 1: Scrape List};
+    P1_Scrape -- Success --> P1_New(Status: New);
+    P1_Scrape -- Failed --> E1_List(Error - Scrape Job List);
 
-    N --> R2{Run Phase 2};
-    E1_List -.-> Skip_P2((Skip P2));
-    R2 --> P2_Proc(Processing Details);
-    P2_Proc -- Success --> P2_Ready(Ready for AI);
+    %% Phase 2 Logic Gate
+    P1_New --> C2_Entry{Process for P2?};
+    E1_List -.-> S2((Skip P2));
+    C2_Entry -- Status=New OR (RetryP2=T AND Status=ErrorP2) --> P2_Run{Run Phase 2: Scrape Details};
+    C2_Entry -- Else --> S2;
+
+    %% Phase 2 Execution
+    P2_Run --> P2_Proc(Status: Processing Details);
+    P2_Proc -- Success --> P2_Ready(Status: Ready for AI);
     P2_Proc -- Invalid Link --> E2_Link(Error - Invalid Job Link);
     P2_Proc -- Scraping Failed --> E2_Detail(Error - Scrape Job Details);
     P2_Proc -- WebDriver Error --> E2_WD(Error - WebDriver Connection);
     P2_Proc -- Missing Data --> E2_Data(Error - Missing Input Data);
-    E2_Link --> Stop_Job((Stop for Job));
-    E2_Detail --> Stop_Job;
-    E2_WD --> Stop_Job;
-    E2_Data --> Stop_Job;
+    E2_Link --> Stop2((Stop Job));
+    E2_Detail --> Stop2;
+    E2_WD --> Stop2;
+    E2_Data --> Stop2;
 
-    P2_Ready --> R3{Run Phase 3};
-    Skip_P2 -.-> Skip_P3((Skip P3));
-    Stop_Job -.-> Skip_P3;
-    R3 --> P3_Proc(Processing AI Analysis);
-    P3_Proc -- Success --> P3_Analyzed(AI Analyzed);
+    %% Phase 3 Logic Gate
+    P2_Ready --> C3_Entry{Process for P3?};
+    S2 -.-> S3((Skip P3));
+    Stop2 -.-> S3;
+    C3_Entry -- Status=ReadyAI OR (RetryP3=T AND Status=ErrorP3) --> P3_Run{Run Phase 3: AI Analysis};
+    C3_Entry -- Else --> S3;
+
+    %% Phase 3 Execution
+    P3_Run --> P3_Proc(Status: Processing AI Analysis);
+    P3_Proc -- Success --> P3_Analyzed(Status: AI Analyzed);
     P3_Proc -- Extraction Failed --> E3_Extract(Error - AI Extraction);
     P3_Proc -- Analysis Failed --> E3_Analysis(Error - AI Analysis);
     P3_Proc -- API/Auth Error --> E3_API(Error - API Config/Auth);
-    E3_Extract --> Stop_Job3((Stop for Job));
-    E3_Analysis --> Stop_Job3;
-    E3_API --> Stop_Job3;
+    E3_Extract --> Stop3((Stop Job));
+    E3_Analysis --> Stop3;
+    E3_API --> Stop3;
 
-    P3_Analyzed --> C4_Score{Check Score?};
-    Skip_P3 -.-> Skip_P4((Skip P4));
-    Stop_Job3 -.-> Skip_P4;
-    C4_Score -- Score < Threshold --> S4_Low(Skipped - Low AI Score);
-    C4_Score -- Score >= Threshold --> C4_Retry{Check Retries?};
-    S4_Low --> Stop_Job4_OK((Stop for Job));
+    %% Phase 4 Logic Gate (Multi-step)
+    P3_Analyzed --> C4_Entry{Process for P4?};
+    P5_NeedsRetailor --> C4_Entry; 
+    S3 -.-> S4((Skip P4));
+    Stop3 -.-> S4;
+    C4_Entry -- Status=Analyzed/NeedRetailor OR (RetryP4=T AND Status=ErrorP4) --> C4_Score{Check Score >= Threshold?};
+    C4_Entry -- Else --> S4;
 
-    P5_NeedsRetailor --> C4_Retry;
+    C4_Score -- No --> S4_Low(Status: Skipped - Low AI Score);
+    C4_Score -- Yes --> C4_RetryLimit{Check Retailoring Attempts < Max?};
+    S4_Low --> Stop4_OK((Stop Job));
 
-    C4_Retry -- Retries < Max --> R4{Run Phase 4};
-    C4_Retry -- Retries >= Max --> E4_MaxRetry(Error - Max Re-Tailoring Attempts);
-    E4_MaxRetry --> Stop_Job4_Fail((Stop for Job));
+    C4_RetryLimit -- No --> E4_MaxRetry(Error - Max Re-Tailoring Attempts);
+    C4_RetryLimit -- Yes --> P4_Run{Run Phase 4: Tailor Resume};
+    E4_MaxRetry --> Stop4_Fail((Stop Job));
 
-    R4 --> P4_Tailoring(Tailoring Resume);
-    P4_Tailoring -- OK, 1 page --> P4_Success(Success);
-    P4_Tailoring -- OK, >1 page --> P4_NeedsEdit(Needs Edit);
+    %% Phase 4 Execution
+    P4_Run --> P4_Tailoring(Status: Tailoring Resume);
+    P4_Tailoring -- OK, 1 page --> P4_Success(Status: Success);
+    P4_Tailoring -- OK, >1 page --> P4_NeedsEdit(Status: Needs Edit);
     P4_Tailoring -- Tailoring Failed --> E4_Tailor(Error - AI Tailoring);
     P4_Tailoring -- HTML Edit Failed --> E4_HTML(Error - HTML Edit);
     P4_Tailoring -- PDF Gen Failed --> E4_PDF(Error - PDF Generation);
     P4_Tailoring -- File Access Error --> E4_File(Error - File Access);
-    E4_Tailor --> Stop_Job4_Fail;
-    E4_HTML --> Stop_Job4_Fail;
-    E4_PDF --> Stop_Job4_Fail;
-    E4_File --> Stop_Job4_Fail;
+    E4_Tailor --> Stop4_Fail;
+    E4_HTML --> Stop4_Fail;
+    E4_PDF --> Stop4_Fail;
+    E4_File --> Stop4_Fail;
 
-    P4_Success --> R5{Run Phase 5};
-    P4_NeedsEdit --> R5;
-    Skip_P4 -.-> Skip_P5((Skip P5));
-    Stop_Job4_Fail -.-> Skip_P5;
-    Stop_Job4_OK -.-> Skip_P5;
-    R5 --> P5_Rescoring(Rescoring);
-    P5_Rescoring -- Score Improved --> P5_Improved(Rescored - Improved);
-    P5_Rescoring -- Score Maintained --> P5_Maintained(Rescored - Maintained);
-    P5_Rescoring -- Score < Threshold --> P5_NeedsRetailor(Needs Re-Tailoring);
+    %% Phase 5 Logic Gate
+    P4_Success --> C5_Entry{Process for P5?};
+    P4_NeedsEdit --> C5_Entry;
+    S4 -.-> S5((Skip P5));
+    Stop4_Fail -.-> S5;
+    Stop4_OK -.-> S5;
+    C5_Entry -- Status=Success/NeedsEdit OR (RetryP5=T AND Status=ErrorP5) --> P5_Run{Run Phase 5: Rescore};
+    C5_Entry -- Else --> S5;
+
+    %% Phase 5 Execution
+    P5_Run --> P5_Rescoring(Status: Rescoring);
+    P5_Rescoring -- Score Improved --> P5_Improved(Status: Rescored - Improved);
+    P5_Rescoring -- Score Maintained --> P5_Maintained(Status: Rescored - Maintained);
+    P5_Rescoring -- Score < Threshold --> P5_NeedsRetailor(Status: Needs Re-Tailoring);
     P5_Rescoring -- Rescoring Failed --> E5_Rescore(Error - Rescoring Failed);
     P5_Rescoring -- Missing HTML --> E5_HTML(Error - Missing Tailored HTML);
     P5_Rescoring -- Compare Error --> E5_Compare(Error - Score Comparison Failed);
 
+    %% Final States & Loop End/Continuation
     P5_Improved --> End_OK((Workflow End OK));
     P5_Maintained --> End_OK;
-    E5_Rescore --> End_Fail((Workflow End Fail));
-    E5_HTML --> End_Fail;
-    E5_Compare --> End_Fail;
+    E5_Rescore --> Stop5_Fail((Stop Job));
+    E5_HTML --> Stop5_Fail;
+    E5_Compare --> Stop5_Fail;
 ```
 
 ## Error Handling & Troubleshooting ⚠️
