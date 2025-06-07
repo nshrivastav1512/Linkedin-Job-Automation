@@ -1,0 +1,138 @@
+# prompts.txt
+# A collection of all AI prompts used in the project.
+
+======================================================================
+== PROMPT 1: Job Detail Extraction (Phase 3)                        ==
+== File: phase3_ai_analysis.py                                      ==
+== Function: extract_job_details_with_gemini                        ==
+======================================================================
+
+Analyze the following job description text and extract the requested information.
+Format the output strictly as a single JSON object. Do NOT include any introductory text, explanations, or markdown formatting like ```json.
+Required JSON Keys:
+- "Key Responsibilities": [List of strings summarizing main duties, or a single concise string].
+- "Required Skills": [List of specific technical and soft skills explicitly mentioned as REQUIRED].
+- "Preferred Skills": [List of skills mentioned as PREFERRED, "nice-to-have", or advantageous. Use [] if none].
+- "Required Experience Level": [String summarizing years/level (e.g., "3-5 years", "Senior", "Entry-level"). Use "Not Specified" if not found].
+- "Key Qualifications": [List of specific degrees, certifications, or crucial non-skill qualifications. Use [] if none].
+- "Concise Company Description": [1-2 sentence summary of the company IF described within this text. Use "Not Specified" if not found].
+
+Job Description Text:
+---
+[... JOB DESCRIPTION PLAIN TEXT ...]
+---
+Output ONLY the JSON object.
+
+
+======================================================================
+== PROMPT 2: Resume Fit Analysis (Phase 3 & 5)                      ==
+== File: phase3_ai_analysis.py                                      ==
+== Function: analyze_resume_fit_with_gemini                         ==
+======================================================================
+
+**Task:** Evaluate the provided resume against the given job description to assess alignment based on specific criteria and provide a 5-star rating and detailed feedback including a scoring breakdown.
+
+**Inputs:**
+*   **Resume Text:**
+    ```
+    [... RESUME PLAIN TEXT ...]
+    ```
+*   **Job Description Text:**
+    ```
+    [... JOB DESCRIPTION PLAIN TEXT ...]
+    ```
+
+**Evaluation Criteria & Scoring (Total 5 Stars Possible):**
+1.  **Keyword and Skill Match (Max 1 Star)** Score: 1.0★ (90–100% match), 0.75★ (75–89%), 0.5★ (50–74%), 0.25★ (<50%)
+2.  **Quantifiable Achievements (Max 1 Star)** Score: 1.0★ (5+ results), 0.75★ (3–4 results), 0.5★ (1–2 results), 0.25★ (0 results)
+3.  **Professional Summary and Content Quality (Max 1 Star)** Score: 1.0★ (Tailored, impactful, concise), 0.75★ (Mostly tailored), 0.5★ (Generic), 0.25★ (Poor)
+4.  **Resume Structure and Formatting (Max 1 Star)** Score: 1.0★ (Well-structured, clear, ATS-friendly), 0.75★ (Minor issues), 0.5★ (Several issues), 0.25★ (Poor)
+5.  **Relevant Tools and Certifications (Max 1 Star)** Score: 1.0★ (100% relevant mentioned), 0.75★ (75–99%), 0.5★ (50–74%), 0.25★ (<50%)
+
+**Final Rating Calculation:** Sum scores (max 5.0).
+**Star Rating Scale:** 5★: 4.75–5.00 (Exceptional), 4★: 3.75–4.74 (Strong), 3★: 2.75–3.74 (Moderate), 2★: 1.75–2.74 (Below average), 1★: 0.00–1.74 (Poor fit)
+
+**Expected Output Format:** Start EXACTLY with "Overall Star Rating:". Follow with Strengths, Areas for Improvement, Actionable Recommendations. **MANDATORY: Conclude with the full "Evaluation Breakdown:" section. Each of the 5 numbered lines in the breakdown MUST include the score (e.g., 0.75★) followed by a concise justification or reason for that specific score.** No markdown formatting.
+
+**Output Structure Example:**
+Overall Star Rating: [Score] out of 5 Stars ([Category])
+
+Strengths:
+- [Highlight 1]
+- [...]
+
+Areas for Improvement:
+- [Suggestion 1]
+- [...]
+
+Actionable Recommendations:
+- [Action 1]
+- [...]
+
+Evaluation Breakdown:
+1. Keyword and Skill Match: [Score]★ - [Justification text for score 1]
+2. Quantifiable Achievements: [Score]★ - [Justification text for score 2]
+3. Professional Summary and Content Quality: [Score]★ - [Justification text for score 3]
+4. Resume Structure and Formatting: [Score]★ - [Justification text for score 4]
+5. Relevant Tools and Certifications: [Score]★ - [Justification text for score 5]
+
+**Generate the analysis text now, ensuring the detailed justification is present for each breakdown item.**
+
+
+======================================================================
+== PROMPT 3: Initial Resume Tailoring (Phase 4)                     ==
+== File: phase4_tailoring.py                                        ==
+== Function: iterative_tailoring_and_pdf_gen (Attempt 1 - Initial)  ==
+======================================================================
+
+**Objective:** Generate tailored resume content... Output must be a single valid JSON object.
+**Inputs:**
+1.  **Base Resume Text Context:** (...)\n```[... BASE RESUME TEXT FOR AI ...]```
+2.  **Target Job Description:** (...)\n```[... JOB DESCRIPTION TEXT ...]```
+3.  **AI Analysis & Recommendations:** (...)\n```[... ORIGINAL AI RECOMMENDATIONS ...]```
+**Instructions:**
+1.  **Analyze all inputs:** ...
+2.  **Generate Tailored Content:**
+    *   `tailored_summary` (String): Craft summary... Use <strong> tags.
+    *   `relevant_experience_title` (String): Identify the **Company Name** heading (the exact text inside the relevant `<h3>` tag under the 'Experience' section in the Base Resume Text Context) that corresponds to the experience you are tailoring bullets for. For example, if tailoring bullets for Yardi, return EXACTLY "Yardi Software Pvt Ltd". **Return only the H3 text.**
+    *   `tailored_bullets` (List of Strings): Rewrite/select 3-5 bullet points... Use <strong> tags.
+    *   `skill_categories` (Dictionary): Create skill dictionary... Use <strong> tags. Example: {{"Category A": ["Skill A1", "Skill A2"], "Category B": ["Skill B1"]}}
+3.  **Guidelines:** Prioritize JD keywords... Be concise...
+4.  **Output Format:** Respond ONLY with a single valid JSON object with keys: "tailored_summary", "relevant_experience_title", "tailored_bullets", "skill_categories".
+**Generate the JSON object now.**
+
+
+======================================================================
+== PROMPT 4: Re-Tailoring Resume (Phase 4)                          ==
+== File: phase4_tailoring.py                                        ==
+== Function: iterative_tailoring_and_pdf_gen (Attempt 1 - Re-Tailor)==
+======================================================================
+
+**Objective:** Revise the PREVIOUSLY generated resume content... Output JSON.
+**Inputs:**
+1.  **Target Job Description:** (...)\n```[... JOB DESCRIPTION TEXT ...]```
+2.  **Original AI Analysis & Recommendations:** (...)\n```[... ORIGINAL AI RECOMMENDATIONS ...]```
+3.  **PREVIOUS Tailoring Attempt Text:** (...)\n```[... PREVIOUS TAILORING TEXT ...]```
+4.  **Base Resume Text Context:** (...)\n```[... BASE RESUME TEXT FOR AI ...]```
+**Instructions:**
+1.  **Analyze:** ...
+2.  **Revise Content:** ...
+    *   `tailored_summary` (String): Rewrite summary... Use <strong> tags.
+    *   `relevant_experience_title` (String): Identify the **Company Name** heading (the exact text inside the relevant `<h3>` tag under 'Experience' in the Base Resume Text Context) that corresponds to the experience you are tailoring bullets for. For example, if tailoring bullets for Yardi, return EXACTLY "Yardi Software Pvt Ltd". **Return only the H3 text.**
+    *   `tailored_bullets` (List of Strings): Rewrite/replace previous bullets... Use <strong> tags.
+    *   `skill_categories` (Dictionary): Revise previous skills list... Use <strong> tags.
+3.  **Guidelines:** ...
+4.  **Output Format:** Respond ONLY with a single valid JSON object with keys: "tailored_summary", "relevant_experience_title", "tailored_bullets", "skill_categories".
+**Generate the revised JSON object now.**
+
+
+======================================================================
+== PROMPT 5: Minor Condensation (Phase 4)                           ==
+== File: phase4_tailoring.py                                        ==
+== Function: iterative_tailoring_and_pdf_gen (Attempt 2)            ==
+======================================================================
+
+**Objective:** Condense the previously generated resume TEXT slightly... Output JSON.
+**Previous Generated Text Content (JSON Format):**
+```json
+[... LATEST AI JSON DATA ...]
