@@ -112,7 +112,7 @@ CONFIG_PHASE1 = {
     # OPTIONAL: Set to True to scrape multiple pages (up to max_pages). False scrapes only the first page.
     "scrape_all_pages": True, # Changed default to True as it's more common
     # OPTIONAL: Maximum number of pages to scrape if scrape_all_pages is True. LinkedIn typically limits to 40.
-    "max_pages_to_scrape": 10, # Reduced default for faster testing
+    "max_pages_to_scrape": 2, # Reduced default for faster testing
     # OPTIONAL: Save the Excel file after each page is scraped (more robust but slower).
     "save_after_each_page": False,
     # OPTIONAL: Set to True for detailed console output during card extraction (can be noisy).
@@ -120,7 +120,7 @@ CONFIG_PHASE1 = {
     # OPTIONAL: Limit the number of *successfully* scraped jobs per page. Set to 0 or None for no limit per page.
     "jobs_per_page_limit": 0,
     # OPTIONAL: Limit the total number of *successfully* scraped jobs for the entire Phase 1 run. Set to 0 or None for no total limit.
-    "total_jobs_limit": 20, # Example: Set to 100 to stop after 100 jobs are scraped
+    "total_jobs_limit": 10, # Example: Set to 100 to stop after 100 jobs are scraped
     # NEW (Proposal #6): Minimum number of NEW UNIQUE jobs to add in Phase 1 before stopping (unless max_pages hit).
     "minimum_unique_jobs_target": 10, # Set to 0 or None to disable this minimum target.
 }
@@ -272,7 +272,7 @@ CONFIG_LINKEDIN_SELECTORS = {
 # --- 9. Workflow Control ---
 CONFIG_WORKFLOW = {
     # MANDATORY: First phase to execute (1, 2, 3, 4, or 5). Set > 1 to skip earlier phases.
-    "start_phase": 4,
+    "start_phase": 3,
     # MANDATORY: Last phase to execute (1, 2, 3, 4, or 5).
     "end_phase": 5, # Defaulting to include Phase 5
     # OPTIONAL: Set True to retry processing rows that previously failed in Phase 2.

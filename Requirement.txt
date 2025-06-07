@@ -1,0 +1,42 @@
+# requirements.txt
+# Dependencies for the LinkedIn Job Application Automation Project
+
+# Core data manipulation library
+pandas
+
+# Used for reading/writing .xlsx Excel files with pandas
+openpyxl
+
+# Web scraping and browser automation
+selenium
+
+# HTML and XML parsing
+beautifulsoup4
+
+# Google Gemini AI API client library
+google-generativeai
+
+# For loading environment variables (API keys) from a .env file
+python-dotenv
+
+# For converting HTML to PDF in Phase 4
+WeasyPrint
+
+# For reading PDF metadata (page count) in Phase 4
+PyPDF2
+
+# Required by pandas and for numerical operations
+numpy
+
+# --- Manual Setup Required (Not handled by pip) ---
+# 1. ChromeDriver:
+#    You must manually download the ChromeDriver executable that matches your
+#    version of Google Chrome and place it in a known location.
+#    Update the 'chromedriver_path' in main_workflow.py to point to this file.
+#    Download from: https://googlechromelabs.github.io/chrome-for-testing/
+
+# 2. WeasyPrint System Dependencies (for Windows, macOS, or Linux):
+#    WeasyPrint requires GTK+ system libraries to be installed separately.
+#    - Windows: Install GTK+ for Windows. See WeasyPrint documentation for details.
+#    - macOS: Use Homebrew: `brew install pango gdk-pixbuf libffi`
+#    - Linux: Use your package manager, e.g., `sudo apt-get install libpango-1.0-0 libpangoft2-1.0-0`

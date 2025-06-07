@@ -502,3 +502,4 @@ graph TD
 *   **Direct Application (Use with Caution):** Explore integrating with LinkedIn's "Easy Apply" functionality if feasible and compliant with ToS (highly complex and potentially risky).
 *   **Feedback Loop Tuning:** Allow user feedback on tailoring quality to potentially refine future AI prompts.
 *   **Cost Tracking:** Add basic logging or estimation of Gemini API usage costs.
+
